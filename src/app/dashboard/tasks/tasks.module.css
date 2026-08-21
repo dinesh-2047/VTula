@@ -1,0 +1,168 @@
+.page {
+  animation: fadeInUp 0.4s ease;
+}
+
+.pageHeader {
+  margin-bottom: 24px;
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  flex-wrap: wrap;
+  gap: 16px;
+}
+
+.pageHeader h1 {
+  font-family: var(--font-heading);
+  font-size: 2rem;
+  font-weight: 800;
+}
+
+.pageHeader p {
+  color: var(--text-secondary);
+  font-size: 0.875rem;
+  margin-top: 4px;
+}
+
+.controlsBar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 16px;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 24px;
+}
+
+.searchWrap {
+  display: flex;
+  gap: 12px;
+  flex: 1;
+  min-width: 280px;
+  max-width: 540px;
+  align-items: center;
+}
+
+.searchInput {
+  padding-left: 38px !important;
+  padding-top: 9px !important;
+  padding-bottom: 9px !important;
+  height: 42px !important;
+  box-sizing: border-box;
+  font-size: 0.88rem !important;
+}
+
+.filterSelect {
+  width: 140px;
+  height: 42px !important;
+  padding-top: 9px !important;
+  padding-bottom: 9px !important;
+  font-size: 0.88rem !important;
+  box-sizing: border-box;
+  flex-shrink: 0;
+}
+
+.grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+  gap: 24px;
+}
+
+.taskCard {
+  background: var(--surface-card);
+  border-radius: var(--radius-xl);
+  box-shadow: var(--clay-shadow-md);
+  padding: 24px;
+  border: 1px solid rgba(255, 255, 255, 0.8);
+  display: flex;
+  flex-direction: column;
+  transition: all 0.3s;
+}
+
+.taskCard:hover {
+  transform: translateY(-3px);
+  box-shadow: var(--clay-shadow-lg);
+}
+
+.cardHeader {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 16px;
+  padding-bottom: 14px;
+  border-bottom: 1px dashed rgba(61, 64, 91, 0.1);
+}
+
+.taskIcon {
+  width: 44px;
+  height: 44px;
+  border-radius: var(--radius-md);
+  background: rgba(224, 122, 95, 0.1);
+  color: var(--color-primary);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.appNo {
+  font-family: var(--font-heading);
+  font-weight: 800;
+  font-size: 0.9rem;
+}
+
+.ownerName {
+  font-size: 0.82rem;
+  color: var(--text-secondary);
+}
+
+.instTitle {
+  font-size: 1.05rem;
+  font-weight: 700;
+  margin-bottom: 2px;
+}
+
+.instSub {
+  font-size: 0.83rem;
+  color: var(--text-secondary);
+  margin-bottom: 14px;
+}
+
+.infoRow {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 0.82rem;
+  color: var(--text-secondary);
+  margin-bottom: 6px;
+}
+
+.infoRow svg {
+  color: var(--text-muted);
+}
+
+.cardFooter {
+  margin-top: auto;
+  padding-top: 16px;
+}
+
+.modalInfoBox {
+  background: var(--surface-warm);
+  padding: 14px 16px;
+  border-radius: var(--radius-md);
+  font-size: 0.85rem;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.spin {
+  animation: claySpin 1s linear infinite;
+}
+
+@media (max-width: 1024px) {
+  .grid { grid-template-columns: repeat(2, 1fr); }
+}
+
+@media (max-width: 768px) {
+  .grid { grid-template-columns: 1fr; }
+  .controlsBar { flex-direction: column; align-items: stretch; }
+  .searchWrap { max-width: 100%; }
+}

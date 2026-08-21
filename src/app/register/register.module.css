@@ -1,0 +1,340 @@
+.page {
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: flex-start;
+  position: relative;
+  padding: 40px 20px 60px;
+  overflow-y: auto;
+}
+
+.background {
+  position: fixed;
+  inset: 0;
+  z-index: -1;
+  background: var(--surface-cream);
+}
+
+.orb1 {
+  position: absolute;
+  top: -15%;
+  left: -10%;
+  width: 500px;
+  height: 500px;
+  border-radius: 50%;
+  background: radial-gradient(circle, rgba(129, 178, 154, 0.12) 0%, transparent 70%);
+  animation: clayFloat 10s ease-in-out infinite;
+}
+
+.orb2 {
+  position: absolute;
+  bottom: -15%;
+  right: -10%;
+  width: 500px;
+  height: 500px;
+  border-radius: 50%;
+  background: radial-gradient(circle, rgba(242, 204, 143, 0.12) 0%, transparent 70%);
+  animation: clayFloat 8s ease-in-out infinite;
+  animation-delay: -3s;
+}
+
+.container {
+  width: 100%;
+  max-width: 540px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  margin: 0 auto;
+}
+
+.logo {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  text-decoration: none;
+  margin-bottom: 24px;
+}
+
+.logoIcon {
+  width: 44px;
+  height: 44px;
+  border-radius: 16px;
+  background: linear-gradient(135deg, var(--color-primary), var(--color-accent));
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: white;
+  box-shadow:
+    0 8px 20px rgba(224, 122, 95, 0.3),
+    inset 0 -2px 6px rgba(196, 89, 63, 0.2),
+    inset 0 2px 6px rgba(255, 255, 255, 0.4);
+}
+
+.logoText {
+  font-family: var(--font-heading);
+  font-weight: 800;
+  font-size: 1.75rem;
+  color: var(--text-primary);
+}
+
+.card {
+  width: 100%;
+  background: var(--surface-card);
+  border-radius: var(--radius-xl);
+  box-shadow: var(--clay-shadow-xl);
+  padding: 36px 32px;
+  border: 1px solid rgba(255, 255, 255, 0.8);
+}
+
+/* Progress */
+.progress {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  max-width: 320px;
+  margin: 0 auto 32px;
+  position: relative;
+}
+
+.progressLine {
+  position: absolute;
+  top: 50%;
+  left: 20px;
+  right: 20px;
+  height: 3px;
+  background: rgba(61, 64, 91, 0.08);
+  border-radius: 2px;
+  z-index: 0;
+  transform: translateY(-50%);
+}
+
+.progressFill {
+  height: 100%;
+  background: linear-gradient(90deg, var(--color-primary), var(--color-secondary));
+  border-radius: 2px;
+  transition: width 0.4s ease;
+}
+
+.progressStep {
+  width: 38px;
+  height: 38px;
+  border-radius: 50%;
+  background: var(--surface-warm);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-family: var(--font-heading);
+  font-weight: 700;
+  font-size: 0.85rem;
+  color: var(--text-muted);
+  position: relative;
+  z-index: 1;
+  transition: all 0.3s ease;
+  border: 2px solid var(--surface-card);
+}
+
+.progressActive {
+  background: var(--color-primary);
+  color: white;
+  box-shadow: 0 6px 16px rgba(224, 122, 95, 0.3);
+}
+
+.progressDone {
+  background: var(--color-secondary);
+  color: white;
+}
+
+/* Step Header */
+.stepHeader {
+  text-align: center;
+  margin-bottom: 24px;
+}
+
+.stepHeader h2 {
+  font-family: var(--font-heading);
+  font-size: 1.5rem;
+  font-weight: 800;
+  margin-bottom: 6px;
+}
+
+.stepHeader p {
+  color: var(--text-secondary);
+  font-size: 0.875rem;
+}
+
+/* Form */
+.form {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.inputIcon {
+  position: relative;
+  width: 100%;
+  display: flex;
+  align-items: center;
+}
+
+.inputIcon input,
+.inputIcon select {
+  width: 100%;
+}
+
+.inputIconSvg {
+  position: absolute;
+  left: 14px;
+  top: 50%;
+  transform: translateY(-50%);
+  color: var(--text-muted);
+  pointer-events: none;
+  z-index: 2;
+}
+
+.eyeBtn {
+  position: absolute;
+  right: 14px;
+  top: 50%;
+  transform: translateY(-50%);
+  background: none;
+  border: none;
+  cursor: pointer;
+  color: var(--text-muted);
+  padding: 4px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 2;
+}
+
+/* Role Selection */
+.roleGrid {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.roleCard {
+  position: relative;
+  text-align: left;
+  padding: 20px;
+  background: var(--surface-input);
+  border: 2px solid rgba(61, 64, 91, 0.08);
+  border-radius: var(--radius-lg);
+  cursor: pointer;
+  transition: all 0.3s ease;
+  display: flex;
+  align-items: flex-start;
+  gap: 16px;
+}
+
+.roleCard:hover {
+  border-color: rgba(224, 122, 95, 0.2);
+  background: rgba(224, 122, 95, 0.03);
+}
+
+.roleActive {
+  border-color: var(--color-primary) !important;
+  background: rgba(224, 122, 95, 0.05) !important;
+  box-shadow: 0 0 0 3px rgba(224, 122, 95, 0.1);
+}
+
+.roleIcon {
+  width: 52px;
+  height: 52px;
+  border-radius: var(--radius-md);
+  background: rgba(224, 122, 95, 0.08);
+  color: var(--color-primary);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.roleCard h4 {
+  font-size: 0.95rem;
+  font-weight: 700;
+  margin-bottom: 4px;
+}
+
+.roleCard p {
+  font-size: 0.8rem;
+  color: var(--text-secondary);
+}
+
+.roleCheck {
+  position: absolute;
+  top: 16px;
+  right: 16px;
+  color: var(--color-primary);
+}
+
+/* Actions */
+.actions {
+  display: flex;
+  align-items: center;
+  margin-top: 24px;
+  gap: 12px;
+}
+
+/* Success */
+.success {
+  text-align: center;
+  padding: 20px 0;
+}
+
+.successIcon {
+  color: var(--color-secondary);
+  margin-bottom: 20px;
+  animation: clayBounceIn 0.5s ease;
+}
+
+.success h2 {
+  font-family: var(--font-heading);
+  font-size: 1.5rem;
+  font-weight: 800;
+  margin-bottom: 8px;
+}
+
+.success p {
+  color: var(--text-secondary);
+  margin-bottom: 28px;
+}
+
+/* Error & Divider */
+.error {
+  margin-top: 16px;
+  padding: 12px 16px;
+  background: var(--status-error-bg);
+  border-radius: var(--radius-sm);
+  color: var(--status-error);
+  font-size: 0.85rem;
+  font-weight: 500;
+  text-align: center;
+}
+
+.divider {
+  display: flex;
+  align-items: center;
+  margin: 24px 0;
+}
+
+.divider::before,
+.divider::after {
+  content: '';
+  flex: 1;
+  height: 1px;
+  background: rgba(61, 64, 91, 0.08);
+}
+
+.divider span {
+  padding: 0 16px;
+  font-size: 0.85rem;
+  color: var(--text-muted);
+  white-space: nowrap;
+}
+
+.spin {
+  animation: claySpin 0.8s linear infinite;
+}

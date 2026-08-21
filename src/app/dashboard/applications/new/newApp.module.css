@@ -1,0 +1,170 @@
+.page {
+  animation: fadeInUp 0.4s ease;
+}
+
+.loadingWrap {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  min-height: 400px;
+  gap: 16px;
+  color: var(--text-muted);
+}
+
+.spin {
+  animation: claySpin 0.8s linear infinite;
+}
+
+.backLink {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-family: var(--font-heading);
+  font-weight: 500;
+  font-size: 0.85rem;
+  color: var(--text-secondary);
+  text-decoration: none;
+  margin-bottom: 24px;
+}
+
+.backLink:hover {
+  color: var(--color-primary);
+}
+
+.container {
+  max-width: 740px;
+  margin: 0 auto;
+}
+
+.header {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  margin-bottom: 28px;
+}
+
+.headerIcon {
+  width: 54px;
+  height: 54px;
+  border-radius: var(--radius-lg);
+  background: rgba(224, 122, 95, 0.1);
+  color: var(--color-primary);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.header h1 {
+  font-family: var(--font-heading);
+  font-size: 1.75rem;
+  font-weight: 800;
+}
+
+.header p {
+  color: var(--text-secondary);
+  font-size: 0.9rem;
+  margin-top: 2px;
+}
+
+.formCard {
+  background: var(--surface-card);
+  border-radius: var(--radius-xl);
+  box-shadow: var(--clay-shadow-lg);
+  padding: 36px;
+  border: 1px solid rgba(255, 255, 255, 0.8);
+}
+
+.formGrid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 20px;
+}
+
+.noInstWarning {
+  padding: 16px;
+  background: var(--surface-warm);
+  border-radius: var(--radius-md);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.feeCard {
+  background: var(--surface-warm);
+  border-radius: var(--radius-lg);
+  padding: 20px 24px;
+  margin-top: 28px;
+  border: 1px solid rgba(61, 64, 91, 0.08);
+}
+
+.feeHeader {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-family: var(--font-heading);
+  font-weight: 700;
+  font-size: 0.95rem;
+  color: var(--text-primary);
+  margin-bottom: 14px;
+  padding-bottom: 10px;
+  border-bottom: 1px dashed rgba(61, 64, 91, 0.1);
+}
+
+.feeHeader svg {
+  color: var(--color-secondary);
+}
+
+.feeRow {
+  display: flex;
+  justify-content: space-between;
+  font-size: 0.88rem;
+  color: var(--text-secondary);
+  padding: 4px 0;
+}
+
+.feeTotal {
+  margin-top: 10px;
+  padding-top: 10px;
+  border-top: 1px solid rgba(61, 64, 91, 0.1);
+  font-weight: 800;
+  font-size: 1.05rem;
+  color: var(--color-primary-dark);
+}
+
+.formActions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 14px;
+  margin-top: 32px;
+}
+
+.error {
+  padding: 12px 16px;
+  background: var(--status-error-bg);
+  border-radius: var(--radius-sm);
+  color: var(--status-error);
+  font-size: 0.85rem;
+  font-weight: 500;
+  margin-bottom: 20px;
+  text-align: center;
+}
+
+.successCard {
+  background: var(--surface-card);
+  border-radius: var(--radius-xl);
+  box-shadow: var(--clay-shadow-lg);
+  padding: 60px 36px;
+  text-align: center;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 16px;
+}
+
+@media (max-width: 640px) {
+  .formGrid { grid-template-columns: 1fr; }
+  .formGrid > div[style*="span 2"] { grid-column: auto !important; }
+}

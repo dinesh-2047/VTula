@@ -1,0 +1,100 @@
+.page {
+  animation: fadeInUp 0.4s ease;
+}
+
+.loadingWrap {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  min-height: 400px;
+  gap: 16px;
+  color: var(--text-muted);
+}
+
+.spin {
+  animation: claySpin 0.8s linear infinite;
+}
+
+.pageHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 28px;
+}
+
+.pageHeader h1 {
+  font-family: var(--font-heading);
+  font-size: 2rem;
+  font-weight: 800;
+}
+
+.pageHeader p {
+  color: var(--text-secondary);
+  font-size: 0.875rem;
+  margin-top: 4px;
+}
+
+.filters {
+  display: flex;
+  gap: 12px;
+  margin-bottom: 28px;
+}
+
+.searchBar {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  background: var(--surface-card);
+  border: 1px solid rgba(61, 64, 91, 0.06);
+  border-radius: var(--radius-md);
+  padding: 10px 16px;
+  box-shadow: var(--clay-shadow-sm);
+  color: var(--text-muted);
+}
+
+.searchBar input {
+  flex: 1;
+  border: none;
+  background: none;
+  outline: none;
+  font-family: var(--font-body);
+  font-size: 0.875rem;
+  color: var(--text-primary);
+}
+
+.filterGroup {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--text-muted);
+}
+
+.emptyState {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  min-height: 360px;
+  text-align: center;
+  gap: 12px;
+}
+
+.emptyState h3 {
+  font-family: var(--font-heading);
+  font-weight: 700;
+  color: var(--text-secondary);
+}
+
+.emptyState p {
+  color: var(--text-muted);
+  font-size: 0.9rem;
+  max-width: 360px;
+  margin-bottom: 8px;
+}
+
+@media (max-width: 768px) {
+  .filters { flex-direction: column; }
+  .pageHeader { flex-direction: column; align-items: flex-start; gap: 12px; }
+}

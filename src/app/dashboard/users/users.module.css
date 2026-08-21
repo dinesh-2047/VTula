@@ -1,0 +1,43 @@
+.page {
+  animation: fadeInUp 0.4s ease;
+}
+
+.pageHeader {
+  margin-bottom: 28px;
+}
+
+.pageHeader h1 {
+  font-family: var(--font-heading);
+  font-size: 2rem;
+  font-weight: 800;
+}
+
+.pageHeader p {
+  color: var(--text-secondary);
+  font-size: 0.875rem;
+  margin-top: 4px;
+}
+
+.searchBar {
+  max-width: 440px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  background: var(--surface-card);
+  border: 1px solid rgba(61, 64, 91, 0.06);
+  border-radius: var(--radius-md);
+  padding: 10px 16px;
+  box-shadow: var(--clay-shadow-sm);
+  color: var(--text-muted);
+  margin-bottom: 24px;
+}
+
+.searchBar input {
+  flex: 1;
+  border: none;
+  background: none;
+  outline: none;
+  font-family: var(--font-body);
+  font-size: 0.875rem;
+  color: var(--text-primary);
+}
