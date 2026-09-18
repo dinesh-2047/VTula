@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import {
@@ -20,7 +20,10 @@ import {
   Eye,
   EyeOff,
 } from 'lucide-react';
-import { INDIAN_STATES } from '@/lib/utils';
+// `constants`, not `utils` — the latter imports `node:crypto` and reads the
+// certificate signing secret, neither of which belongs in a browser bundle.
+import { INDIAN_STATES } from '@/lib/constants';
+import { districtsFor } from '@/lib/districts';
 import styles from './register.module.css';
 
 const ROLES = [
@@ -53,6 +56,9 @@ export default function RegisterPage() {
     setError('');
   };
 
+  // Derived, never stored twice: the district list is whatever the chosen state has.
+  const districts = useMemo(() => districtsFor(formData.state), [formData.state]);
+
   const handleNext = () => {
     if (step === 1) {
       if (!formData.name || !formData.email || !formData.password) {
@@ -73,6 +79,21 @@ export default function RegisterPage() {
   };
 
   const handleSubmit = async () => {
+    /*
+     * State and district are checked here rather than only on the server because
+     * they decide which office ever sees this account. A registration that lands
+     * without a jurisdiction is not a broken record — it is a business whose
+     * applications quietly reach nobody.
+     */
+    if (!formData.state || !formData.district) {
+      setError('Choose your state and district — they decide which office handles your work.');
+      return;
+    }
+    if (formData.role === 'GATC' && !formData.organizationName.trim()) {
+      setError('A test centre account needs the centre name.');
+      return;
+    }
+
     setLoading(true);
     setError('');
 
@@ -275,7 +296,21 @@ export default function RegisterPage() {
                     <select
                       className="clay-input clay-select"
                       value={formData.state}
-                      onChange={(e) => updateField('state', e.target.value)}
+                      onChange={(e) => {
+                        /*
+                         * Changing the state has to clear the district. Leaving
+                         * "Shimla" selected under Kerala would file the account
+                         * into a jurisdiction that does not exist, and
+                         * `scopeFilter` matches the string exactly — nobody's
+                         * queue would ever show it.
+                         */
+                        setFormData((prev) => ({
+                          ...prev,
+                          state: e.target.value,
+                          district: '',
+                        }));
+                        setError('');
+                      }}
                       style={{ paddingLeft: 44 }}
                     >
                       <option value="">Select State</option>
@@ -287,14 +322,27 @@ export default function RegisterPage() {
                 </div>
 
                 <div className="clay-input-group">
-                  <label className="clay-label">District</label>
-                  <input
-                    type="text"
-                    className="clay-input"
-                    placeholder="Enter your district"
-                    value={formData.district}
-                    onChange={(e) => updateField('district', e.target.value)}
-                  />
+                  <label className="clay-label">District *</label>
+                  <div className={styles.inputIcon}>
+                    <MapPin size={18} className={styles.inputIconSvg} />
+                    <select
+                      className="clay-input clay-select"
+                      value={formData.district}
+                      disabled={districts.length === 0}
+                      onChange={(e) => updateField('district', e.target.value)}
+                      style={{ paddingLeft: 44 }}
+                    >
+                      <option value="">
+                        {formData.state ? 'Select District' : 'Choose a state first'}
+                      </option>
+                      {districts.map((d) => (
+                        <option key={d} value={d}>{d}</option>
+                      ))}
+                    </select>
+                  </div>
+                  <span className={styles.fieldHint}>
+                    Your district decides which Legal Metrology office handles your applications.
+                  </span>
                 </div>
 
                 {formData.role === 'GATC' && (

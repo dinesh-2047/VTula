@@ -12,9 +12,13 @@ import {
   CheckCircle,
   Building,
   X,
-  Upload,
 } from 'lucide-react';
-import { INDIAN_STATES, INSTRUMENT_TYPES } from '@/lib/utils';
+// From `constants`, not `utils`: `utils.ts` opens with `import crypto from 'crypto'`
+// and holds the certificate signing secret, so pulling it into a `'use client'`
+// module drags server-only code into the browser bundle. It re-exports these two
+// names for backwards compatibility, which is exactly what made the wrong import
+// look harmless.
+import { INDIAN_STATES, INSTRUMENT_TYPES } from '@/lib/constants';
 import styles from './new.module.css';
 
 interface PhotoItem {
@@ -392,6 +396,10 @@ export default function NewInstrumentPage() {
                       border: '2px solid white',
                     }}
                   >
+                    {/* eslint-disable-next-line @next/next/no-img-element --
+                        `photo.url` is a data URL this page just produced by
+                        compressing the file in-browser, so there is no remote
+                        asset for next/image to optimise. */}
                     <img
                       src={photo.url}
                       alt={photo.name}

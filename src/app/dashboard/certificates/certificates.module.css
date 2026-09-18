@@ -1,5 +1,5 @@
 .page {
-  animation: fadeInUp 0.4s ease;
+  animation: global(fadeInUp) 0.4s ease;
 }
 
 .loadingWrap {
@@ -13,11 +13,11 @@
 }
 
 .spin {
-  animation: claySpin 0.8s linear infinite;
+  animation: global(claySpin) 0.8s linear infinite;
 }
 
 .pageHeader {
-  margin-bottom: 28px;
+  margin-bottom: 24px;
 }
 
 .pageHeader h1 {
@@ -32,12 +32,69 @@
   margin-top: 4px;
 }
 
+/* Status chips ------------------------------------------------------- */
+
+.statusChips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 16px;
+}
+
+.chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  font-family: var(--font-heading);
+  font-size: 0.8rem;
+  font-weight: 600;
+  padding: 7px 14px;
+  border: 1px solid rgba(61, 64, 91, 0.08);
+  border-radius: var(--radius-pill);
+  background: var(--surface-card);
+  color: var(--text-secondary);
+  cursor: pointer;
+  box-shadow: var(--clay-shadow-sm);
+  transition: all 0.2s ease;
+}
+
+.chip:hover {
+  color: var(--color-primary);
+}
+
+.chipActive {
+  background: var(--color-primary);
+  border-color: var(--color-primary);
+  color: white;
+}
+
+.chipCount {
+  font-size: 0.72rem;
+  font-weight: 700;
+  background: var(--surface-warm);
+  color: var(--text-secondary);
+  padding: 1px 7px;
+  border-radius: var(--radius-pill);
+}
+
+.chipActive .chipCount {
+  background: rgba(255, 255, 255, 0.24);
+  color: white;
+}
+
+/* Filters ------------------------------------------------------------ */
+
 .filters {
-  margin-bottom: 28px;
+  display: flex;
+  gap: 12px;
+  margin-bottom: 24px;
+  align-items: center;
+  flex-wrap: wrap;
 }
 
 .searchBar {
   max-width: 500px;
+  flex: 1;
   display: flex;
   align-items: center;
   gap: 10px;
@@ -58,6 +115,69 @@
   font-size: 0.875rem;
   color: var(--text-primary);
 }
+
+.clearSearch {
+  background: none;
+  border: none;
+  cursor: pointer;
+  color: var(--text-muted);
+  display: flex;
+  padding: 2px;
+}
+
+.clearSearch:hover {
+  color: var(--color-primary);
+}
+
+/* Banners ------------------------------------------------------------ */
+
+.errorBox,
+.warnBox,
+.infoBox,
+.noticeOk {
+  display: flex;
+  align-items: flex-start;
+  gap: 9px;
+  border-radius: var(--radius-md);
+  padding: 12px 14px;
+  font-size: 0.86rem;
+  line-height: 1.5;
+  margin-bottom: 18px;
+}
+
+.errorBox svg,
+.warnBox svg,
+.infoBox svg,
+.noticeOk svg {
+  flex-shrink: 0;
+  margin-top: 1px;
+}
+
+.errorBox {
+  background: rgba(224, 122, 95, 0.12);
+  border: 1px solid rgba(224, 122, 95, 0.34);
+  color: #9c3b21;
+}
+
+.warnBox {
+  background: var(--status-warning-bg);
+  border: 1px solid rgba(212, 168, 94, 0.42);
+  color: #7a5a12;
+}
+
+.infoBox {
+  background: var(--status-info-bg);
+  border: 1px solid rgba(123, 175, 212, 0.4);
+  color: #2f5d7c;
+}
+
+.noticeOk {
+  background: var(--status-success-bg);
+  border: 1px solid rgba(123, 198, 126, 0.42);
+  color: #2e6b31;
+}
+
+/* Certificate cards -------------------------------------------------- */
 
 .grid {
   display: grid;
@@ -102,18 +222,13 @@
   flex-shrink: 0;
 }
 
-.certBadge {
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
-  font-size: 0.72rem;
-  font-weight: 700;
-  color: #2E7D32;
-  background: var(--status-success-bg);
-  padding: 2px 8px;
-  border-radius: 999px;
-  text-transform: uppercase;
-  letter-spacing: 0.5px;
+/*
+ * A certificate that is not in force should not carry the same confident green
+ * mark as one that is. The old card used one green shield for every status.
+ */
+.certIconMuted {
+  background: rgba(61, 64, 91, 0.07);
+  color: var(--text-muted);
 }
 
 .certNo {
@@ -122,6 +237,11 @@
   font-size: 0.9rem;
   color: var(--text-primary);
   margin-top: 4px;
+}
+
+.certRevision {
+  font-size: 0.72rem;
+  color: var(--text-muted);
 }
 
 .certBody h4 {
@@ -136,6 +256,32 @@
   margin-bottom: 14px;
 }
 
+/* The sentence that explains a status, sitting next to the badge that states it. */
+.certAlert,
+.certWarn,
+.certMuted {
+  font-size: 0.78rem;
+  line-height: 1.5;
+  border-radius: var(--radius-sm);
+  padding: 8px 11px;
+  margin-bottom: 12px;
+}
+
+.certAlert {
+  background: var(--status-error-bg);
+  color: #9c3b21;
+}
+
+.certWarn {
+  background: var(--status-warning-bg);
+  color: #7a5a12;
+}
+
+.certMuted {
+  background: var(--surface-warm);
+  color: var(--text-secondary);
+}
+
 .certRows {
   display: flex;
   flex-direction: column;
@@ -143,22 +289,41 @@
   background: var(--surface-warm);
   padding: 12px 14px;
   border-radius: var(--radius-md);
-  margin-bottom: 18px;
+  margin-bottom: 14px;
 }
 
 .certRow {
   display: flex;
   justify-content: space-between;
+  gap: 12px;
   font-size: 0.8rem;
 }
 
 .certRow span:first-child {
   color: var(--text-muted);
+  flex-shrink: 0;
 }
 
-.certRow span:last-child,
-.certRow strong {
+.certRow strong,
+.certRow span:last-child {
   color: var(--text-primary);
+  text-align: right;
+  overflow-wrap: anywhere;
+}
+
+.dateOk {
+  color: var(--color-secondary-dark) !important;
+  font-weight: 600;
+}
+
+.dateSoon {
+  color: #7a5a12 !important;
+  font-weight: 700;
+}
+
+.dateLapsed {
+  color: #9c3b21 !important;
+  font-weight: 700;
 }
 
 .certFooter {
@@ -170,6 +335,30 @@
   padding-top: 12px;
   border-top: 1px solid rgba(61, 64, 91, 0.05);
 }
+
+.footerRight {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+/* Paging ------------------------------------------------------------- */
+
+.pager {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 16px;
+  margin-top: 28px;
+}
+
+.pagerInfo {
+  font-size: 0.82rem;
+  color: var(--text-secondary);
+  font-weight: 600;
+}
+
+/* Empty state -------------------------------------------------------- */
 
 .emptyState {
   display: flex;
@@ -190,14 +379,388 @@
 .emptyState p {
   color: var(--text-muted);
   font-size: 0.9rem;
-  max-width: 360px;
+  max-width: 42ch;
+  line-height: 1.6;
   margin-bottom: 8px;
 }
 
+/* Detail drawer ------------------------------------------------------ */
+
+.drawerBackdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(44, 46, 66, 0.42);
+  backdrop-filter: blur(2px);
+  z-index: 120;
+  display: flex;
+  justify-content: flex-end;
+}
+
+.drawer {
+  width: min(620px, 100%);
+  height: 100%;
+  background: var(--surface-cream);
+  box-shadow: var(--clay-shadow-xl);
+  display: flex;
+  flex-direction: column;
+  animation: slideIn 0.28s cubic-bezier(0.34, 1.2, 0.64, 1);
+}
+
+@keyframes slideIn {
+  from {
+    transform: translateX(24px);
+    opacity: 0;
+  }
+  to {
+    transform: translateX(0);
+    opacity: 1;
+  }
+}
+
+.drawerHeader {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 22px 24px 16px;
+  border-bottom: 1px solid rgba(61, 64, 91, 0.08);
+  background: var(--surface-card);
+}
+
+.drawerHeader h2 {
+  font-family: var(--font-heading);
+  font-size: 1.2rem;
+  font-weight: 800;
+  margin-bottom: 7px;
+  overflow-wrap: anywhere;
+}
+
+.iconBtn {
+  background: none;
+  border: none;
+  cursor: pointer;
+  color: var(--text-muted);
+  display: flex;
+  padding: 4px;
+  border-radius: var(--radius-sm);
+  flex-shrink: 0;
+}
+
+.iconBtn:hover {
+  color: var(--color-primary);
+  background: var(--surface-warm);
+}
+
+.drawerBody {
+  flex: 1;
+  overflow-y: auto;
+  padding: 20px 24px 28px;
+}
+
+.drawerLoading {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 14px;
+  padding: 70px 0;
+  color: var(--text-muted);
+  font-size: 0.86rem;
+}
+
+.drawerFooter {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 14px 24px;
+  border-top: 1px solid rgba(61, 64, 91, 0.08);
+  background: var(--surface-card);
+}
+
+/* QR block ----------------------------------------------------------- */
+
+.qrSection {
+  display: flex;
+  gap: 18px;
+  align-items: flex-start;
+  background: var(--surface-card);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--clay-shadow-sm);
+  padding: 18px;
+  margin-bottom: 18px;
+}
+
+.qrImage {
+  border-radius: var(--radius-sm);
+  background: white;
+  padding: 6px;
+  box-shadow: var(--clay-shadow-sm);
+  flex-shrink: 0;
+}
+
+.qrText {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 8px;
+}
+
+.qrText strong {
+  font-family: var(--font-heading);
+  font-size: 0.92rem;
+  font-weight: 700;
+}
+
+.qrText p {
+  font-size: 0.79rem;
+  color: var(--text-secondary);
+  line-height: 1.55;
+}
+
+.hint {
+  font-size: 0.74rem;
+  color: var(--text-muted);
+  line-height: 1.5;
+}
+
+/* Integrity ---------------------------------------------------------- */
+
+.integrityOk,
+.integrityBad {
+  display: flex;
+  gap: 11px;
+  align-items: flex-start;
+  border-radius: var(--radius-md);
+  padding: 13px 15px;
+  margin-bottom: 18px;
+}
+
+.integrityOk svg,
+.integrityBad svg {
+  flex-shrink: 0;
+  margin-top: 1px;
+}
+
+.integrityOk {
+  background: var(--status-success-bg);
+  border: 1px solid rgba(123, 198, 126, 0.42);
+  color: #2e6b31;
+}
+
+.integrityBad {
+  background: var(--status-error-bg);
+  border: 1px solid rgba(229, 115, 115, 0.45);
+  color: #9c3b21;
+}
+
+.integrityOk strong,
+.integrityBad strong {
+  font-family: var(--font-heading);
+  font-size: 0.88rem;
+  display: block;
+  margin-bottom: 2px;
+}
+
+.integrityOk p,
+.integrityBad p {
+  font-size: 0.79rem;
+  line-height: 1.55;
+}
+
+/* Fact sections ------------------------------------------------------ */
+
+.drawerSection {
+  background: var(--surface-card);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--clay-shadow-sm);
+  padding: 18px;
+  margin-bottom: 16px;
+}
+
+.drawerSection h3 {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  font-family: var(--font-heading);
+  font-size: 0.98rem;
+  font-weight: 700;
+  margin-bottom: 14px;
+}
+
+.sectionNote {
+  font-size: 0.79rem;
+  color: var(--text-secondary);
+  line-height: 1.55;
+  margin-bottom: 12px;
+}
+
+.factGrid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 13px 18px;
+}
+
+.factGrid > div {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.factGrid span {
+  font-size: 0.72rem;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.4px;
+}
+
+.factGrid strong {
+  font-size: 0.86rem;
+  color: var(--text-primary);
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}
+
+.sectionActions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-top: 4px;
+}
+
+/*
+ * Revocation is destructive and permanent, so its button does not look like the
+ * others. `clay-btn` supplies the shape; only the colour is overridden here.
+ */
+.dangerBtn {
+  background: var(--status-error);
+  color: white;
+  border-color: var(--status-error);
+}
+
+.dangerBtn:hover:not(:disabled) {
+  background: #cf5c5c;
+}
+
+/* Reason form -------------------------------------------------------- */
+
+.reasonForm {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  background: var(--surface-warm);
+  border-radius: var(--radius-md);
+  padding: 16px;
+}
+
+.reasonForm > strong {
+  font-family: var(--font-heading);
+  font-size: 0.92rem;
+  margin-bottom: 4px;
+}
+
+.reasonForm textarea {
+  resize: vertical;
+  font-family: var(--font-body);
+}
+
+/* History ------------------------------------------------------------ */
+
+.timeline {
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  padding-left: 4px;
+}
+
+.timeline li {
+  display: flex;
+  gap: 12px;
+  position: relative;
+}
+
+.timeline li:not(:last-child)::before {
+  content: '';
+  position: absolute;
+  left: 4px;
+  top: 15px;
+  bottom: -16px;
+  width: 1px;
+  background: rgba(61, 64, 91, 0.14);
+}
+
+.timelineDot {
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  background: var(--color-secondary);
+  flex-shrink: 0;
+  margin-top: 5px;
+}
+
+.timeline strong {
+  display: block;
+  font-size: 0.85rem;
+  font-weight: 600;
+  line-height: 1.45;
+}
+
+.timelineMeta {
+  display: block;
+  font-size: 0.73rem;
+  color: var(--text-muted);
+  margin-top: 2px;
+  line-height: 1.5;
+}
+
+.timelineNote {
+  display: block;
+  font-size: 0.76rem;
+  color: var(--text-secondary);
+  margin-top: 4px;
+  line-height: 1.5;
+  padding-left: 9px;
+  border-left: 2px solid rgba(61, 64, 91, 0.12);
+}
+
+/* Responsive --------------------------------------------------------- */
+
 @media (max-width: 1024px) {
-  .grid { grid-template-columns: repeat(2, 1fr); }
+  .grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
 }
 
 @media (max-width: 768px) {
-  .grid { grid-template-columns: 1fr; }
+  .grid {
+    grid-template-columns: 1fr;
+  }
+
+  .factGrid {
+    grid-template-columns: 1fr;
+  }
+
+  .qrSection {
+    flex-direction: column;
+    align-items: center;
+    text-align: center;
+  }
+
+  .qrText {
+    align-items: center;
+  }
+
+  .certFooter {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .footerRight {
+    justify-content: stretch;
+  }
+
+  .footerRight > * {
+    flex: 1;
+  }
 }

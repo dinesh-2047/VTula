@@ -1,5 +1,5 @@
 .page {
-  animation: fadeInUp 0.4s ease;
+  animation: global(fadeInUp) 0.4s ease;
 }
 
 .pageHeader {
@@ -154,7 +154,379 @@
 }
 
 .spin {
-  animation: claySpin 1s linear infinite;
+  animation: global(claySpin) 1s linear infinite;
+}
+
+.loadingWrap {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  padding: 60px 20px;
+  color: var(--text-secondary);
+  font-size: 0.88rem;
+  text-align: center;
+}
+
+/* Whose queue this is. Shown because an officer seeing an empty list needs to
+   know whether it is empty or simply out of their jurisdiction. */
+.scopeChip {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  background: var(--surface-warm);
+  border-radius: var(--radius-md);
+  padding: 10px 14px;
+  color: var(--text-secondary);
+}
+
+.scopeChip svg {
+  color: var(--color-primary);
+  flex-shrink: 0;
+}
+
+.scopeChip > div {
+  display: flex;
+  flex-direction: column;
+  line-height: 1.3;
+}
+
+.scopeChip strong {
+  font-size: 0.85rem;
+  color: var(--text-primary);
+}
+
+.scopeChip span {
+  font-size: 0.76rem;
+}
+
+.bannerOk,
+.bannerBad,
+.bannerWarn {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 12px 16px;
+  border-radius: var(--radius-md);
+  font-size: 0.86rem;
+  margin-bottom: 18px;
+}
+
+.bannerOk {
+  background: rgba(129, 178, 154, 0.16);
+  color: #2f6b4f;
+  border: 1px solid rgba(129, 178, 154, 0.4);
+}
+
+.bannerBad {
+  background: rgba(224, 122, 95, 0.14);
+  color: #9c3b21;
+  border: 1px solid rgba(224, 122, 95, 0.38);
+}
+
+.bannerWarn {
+  background: rgba(244, 162, 97, 0.16);
+  color: #8a5312;
+  border: 1px solid rgba(244, 162, 97, 0.4);
+}
+
+.bannerOk svg,
+.bannerBad svg,
+.bannerWarn svg {
+  flex-shrink: 0;
+}
+
+.bannerOk span,
+.bannerBad span,
+.bannerWarn span {
+  flex: 1;
+}
+
+.bannerOk button,
+.bannerBad button,
+.bannerWarn button {
+  background: none;
+  border: none;
+  cursor: pointer;
+  color: inherit;
+  font-size: 0.8rem;
+  font-weight: 700;
+  padding: 2px 6px;
+  border-radius: var(--radius-sm, 6px);
+}
+
+.bannerOk button:hover,
+.bannerBad button:hover,
+.bannerWarn button:hover {
+  background: rgba(0, 0, 0, 0.06);
+}
+
+.searchIcon {
+  position: absolute;
+  left: 12px;
+  top: 50%;
+  transform: translateY(-50%);
+  color: var(--text-muted);
+  pointer-events: none;
+}
+
+.mineToggle {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  font-size: 0.82rem;
+  color: var(--text-secondary);
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+/* The priority score is advisory, so it is always shown with its reasons. A
+   number an officer cannot interrogate is a number that quietly makes decisions. */
+.priorityBox {
+  margin-top: 10px;
+  font-size: 0.78rem;
+}
+
+.priorityBox summary {
+  cursor: pointer;
+  color: var(--text-secondary);
+  font-weight: 600;
+}
+
+.priorityBox summary span {
+  font-weight: 400;
+  color: var(--text-muted);
+}
+
+.priorityBox ul {
+  margin: 6px 0 0;
+  padding-left: 18px;
+  color: var(--text-secondary);
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.flagStrip {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 10px;
+  padding: 8px 10px;
+  border-radius: var(--radius-md);
+  background: rgba(244, 162, 97, 0.14);
+  color: #8a5312;
+  font-size: 0.78rem;
+}
+
+.flagStrip svg {
+  flex-shrink: 0;
+}
+
+.inlineLink {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  margin-top: 6px;
+  font-size: 0.8rem;
+  color: var(--color-primary);
+  font-weight: 600;
+  text-decoration: none;
+}
+
+.inlineLink:hover {
+  text-decoration: underline;
+}
+
+.note {
+  font-size: 0.79rem;
+  color: var(--text-secondary);
+  line-height: 1.5;
+  margin: 0;
+}
+
+.modalInfoBox h4,
+.riskBox h4 {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 0.8rem;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--text-muted);
+  margin: 0 0 2px;
+}
+
+/* Test-point table. The observed column is the only editable one — the reference
+   load and the permissible error come from the applicable rule. */
+.readingTable {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.82rem;
+  margin-top: 8px;
+}
+
+.readingTable th {
+  text-align: left;
+  font-weight: 700;
+  font-size: 0.74rem;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  color: var(--text-muted);
+  padding: 6px 8px;
+  border-bottom: 1px solid rgba(61, 64, 91, 0.12);
+}
+
+.readingTable td {
+  padding: 6px 8px;
+  border-bottom: 1px dashed rgba(61, 64, 91, 0.08);
+  vertical-align: middle;
+}
+
+.rowFail {
+  background: rgba(224, 122, 95, 0.09);
+  color: #9c3b21;
+  font-weight: 600;
+}
+
+.readingInput {
+  width: 100px;
+  padding: 6px 8px !important;
+  font-size: 0.82rem !important;
+  height: auto !important;
+}
+
+.riskBox {
+  background: rgba(244, 162, 97, 0.1);
+  border: 1px solid rgba(244, 162, 97, 0.35);
+  border-radius: var(--radius-md);
+  padding: 14px 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.riskItem {
+  font-size: 0.83rem;
+  padding-top: 8px;
+  border-top: 1px dashed rgba(61, 64, 91, 0.12);
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.riskItem:first-of-type {
+  border-top: none;
+}
+
+.riskItem ul {
+  margin: 0;
+  padding-left: 18px;
+  color: var(--text-secondary);
+  font-size: 0.79rem;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.rationale {
+  margin: 4px 0 0;
+  padding-left: 18px;
+  font-size: 0.8rem;
+  color: var(--text-secondary);
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.checkGrid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(190px, 1fr));
+  gap: 6px;
+}
+
+.checkItem {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  font-size: 0.8rem;
+  color: var(--text-secondary);
+  cursor: pointer;
+}
+
+.checkRow {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 8px 0;
+  border-bottom: 1px dashed rgba(61, 64, 91, 0.08);
+  font-size: 0.83rem;
+}
+
+.checkButtons {
+  display: flex;
+  gap: 5px;
+  flex-shrink: 0;
+}
+
+.evidenceList {
+  list-style: none;
+  margin: 10px 0 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.evidenceList li {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 0.8rem;
+  background: var(--surface-warm);
+  padding: 7px 10px;
+  border-radius: var(--radius-md);
+}
+
+.evidenceList a {
+  flex: 1;
+  color: var(--text-primary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.evidenceList code {
+  font-size: 0.72rem;
+  color: var(--text-muted);
+}
+
+.evidenceList button {
+  background: none;
+  border: none;
+  cursor: pointer;
+  color: var(--text-muted);
+  padding: 2px;
+  display: flex;
+}
+
+.evidenceList button:hover {
+  color: var(--color-primary);
+}
+
+.standardRow {
+  display: grid;
+  grid-template-columns: 2fr 1fr 1fr;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+
+.standardRow input {
+  font-size: 0.82rem !important;
+  padding: 8px 10px !important;
+  height: auto !important;
 }
 
 @media (max-width: 1024px) {
@@ -165,4 +537,6 @@
   .grid { grid-template-columns: 1fr; }
   .controlsBar { flex-direction: column; align-items: stretch; }
   .searchWrap { max-width: 100%; }
+  .standardRow { grid-template-columns: 1fr; }
+  .checkRow { flex-direction: column; align-items: flex-start; }
 }

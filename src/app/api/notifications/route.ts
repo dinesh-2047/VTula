@@ -1,115 +1,109 @@
-import { NextRequest, NextResponse } from 'next/server';
-import { auth } from '@/lib/auth';
-import dbConnect from '@/lib/db';
+import { NextRequest } from 'next/server';
+import { Types } from 'mongoose';
 import Notification from '@/models/Notification';
-import Application from '@/models/Application';
-import Certificate from '@/models/Certificate';
+import { handle, ok, requireAuth, BadRequest } from '@/lib/rbac';
 
-export async function GET(req: NextRequest) {
-  try {
-    const session = await auth();
-    if (!session?.user) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-    }
+/**
+ * The signed-in user's notifications.
+ *
+ * What this replaces: on an empty inbox the old GET *synthesised* notifications
+ * by querying applications and certificates — and for any non-Owner role it did
+ * so with `{}` as the filter, then wrote the resulting rows into the reader's own
+ * notification collection. An officer opening the bell icon permanently copied
+ * other businesses' application and certificate details into their own inbox.
+ *
+ * Notifications are now written at the moment the event happens (see
+ * `src/lib/notify.ts`, which also handles email / SMS / WhatsApp fan-out and
+ * deduplication). This route only reads and marks them.
+ */
 
-    await dbConnect();
-    const userId = (session.user as { id?: string }).id;
-    const userRole = (session.user as { role?: string }).role || 'Owner';
+export const GET = handle(async (req: NextRequest) => {
+  const user = await requireAuth();
+  const sp = req.nextUrl.searchParams;
 
-    let notifs = await Notification.find({ userId }).sort({ createdAt: -1 }).lean();
+  const query: Record<string, unknown> = {
+    userId: new Types.ObjectId(user.id),
+    // Email/SMS/WhatsApp rows are delivery records, not inbox items.
+    channel: 'app',
+  };
 
-    // If user has no notifications yet, synthesize dynamic real alerts from user's DB records
-    if (notifs.length === 0 && userId) {
-      const generatedNotifs: any[] = [];
+  if (sp.get('unread') === 'true') query.isRead = false;
 
-      // Fetch user's applications or all applications if officer
-      const appQuery = userRole === 'Owner' ? { ownerId: userId } : {};
-      const applications = await Application.find(appQuery)
-        .populate('instrumentId', 'type serialNo brand')
-        .sort({ createdAt: -1 })
-        .limit(5)
-        .lean();
+  const type = sp.get('type');
+  if (type && ['info', 'success', 'warning', 'error'].includes(type)) query.type = type;
 
-      for (const app of applications) {
-        const inst = app.instrumentId as any;
-        generatedNotifs.push({
-          userId,
-          title: `Application ${app.applicationNo}`,
-          message: `Verification application for ${inst?.type || 'Instrument'} (${inst?.serialNo || 'SN'}) is currently ${app.status}.`,
-          type: app.status === 'Approved' ? 'success' : app.status === 'Rejected' ? 'error' : 'info',
-          channel: 'app',
-          relatedModel: 'Application',
-          relatedId: app._id,
-          isRead: false,
-          createdAt: app.createdAt || new Date(),
-        });
-      }
+  const limit = Math.min(100, Math.max(1, Number(sp.get('limit')) || 50));
 
-      // Fetch user's certificates
-      const certQuery = userRole === 'Owner' ? { ownerId: userId } : {};
-      const certificates = await Certificate.find(certQuery).sort({ createdAt: -1 }).limit(5).lean();
+  const [notifications, unreadCount, total] = await Promise.all([
+    Notification.find(query).sort({ createdAt: -1 }).limit(limit).lean(),
+    Notification.countDocuments({
+      userId: new Types.ObjectId(user.id),
+      channel: 'app',
+      isRead: false,
+    }),
+    Notification.countDocuments({ userId: new Types.ObjectId(user.id), channel: 'app' }),
+  ]);
 
-      for (const cert of certificates) {
-        generatedNotifs.push({
-          userId,
-          title: `Certificate ${cert.certNo} Active`,
-          message: `Digital verification certificate for ${cert.instrumentSnapshot?.type} issued and valid until ${new Date(cert.expiryDate).toLocaleDateString('en-IN')}.`,
-          type: 'success',
-          channel: 'app',
-          relatedModel: 'Certificate',
-          relatedId: cert._id,
-          isRead: false,
-          createdAt: cert.issuedDate || new Date(),
-        });
-      }
+  return ok({ notifications, unreadCount, total });
+});
 
-      if (generatedNotifs.length > 0) {
-        // Save initial dynamic notifications to DB
-        await Notification.insertMany(generatedNotifs);
-        notifs = await Notification.find({ userId }).sort({ createdAt: -1 }).lean();
-      }
-    }
+/**
+ * Marks notifications read — all of them, or the ids given.
+ *
+ * Scoped by `userId` in the filter itself, so passing someone else's id simply
+ * matches nothing.
+ */
+export const PATCH = handle(async (req: NextRequest) => {
+  const user = await requireAuth();
+  const body = (await req.json().catch(() => ({}))) as { ids?: string[]; all?: boolean };
 
-    return NextResponse.json({ success: true, notifications: notifs });
-  } catch (error: unknown) {
-    console.error('Notifications GET error:', error);
-    return NextResponse.json({ error: 'Failed to fetch notifications' }, { status: 500 });
+  const filter: Record<string, unknown> = {
+    userId: new Types.ObjectId(user.id),
+    isRead: false,
+  };
+
+  if (Array.isArray(body.ids) && body.ids.length > 0) {
+    const ids = body.ids.filter((i) => Types.ObjectId.isValid(i)).map((i) => new Types.ObjectId(i));
+    if (ids.length === 0) throw BadRequest('No valid notification ids supplied', 'INVALID_IDS');
+    filter._id = { $in: ids };
+  } else if (body.all !== true) {
+    throw BadRequest('Supply `ids` to mark specific notifications, or `all: true`', 'NOTHING_TO_MARK');
   }
-}
 
-export async function PATCH(req: NextRequest) {
-  try {
-    const session = await auth();
-    if (!session?.user) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-    }
+  const result = await Notification.updateMany(filter, {
+    isRead: true,
+    readAt: new Date(),
+  });
 
-    await dbConnect();
-    const userId = (session.user as { id?: string }).id;
+  const unreadCount = await Notification.countDocuments({
+    userId: new Types.ObjectId(user.id),
+    channel: 'app',
+    isRead: false,
+  });
 
-    // Mark all as read
-    await Notification.updateMany({ userId }, { isRead: true });
-    return NextResponse.json({ success: true, message: 'Notifications marked as read' });
-  } catch (error: unknown) {
-    console.error('Notifications PATCH error:', error);
-    return NextResponse.json({ error: 'Failed to update notifications' }, { status: 500 });
+  return ok({ updated: result.modifiedCount, unreadCount });
+});
+
+/**
+ * Clears the user's own read notifications.
+ *
+ * Unread ones are kept deliberately: a compliance alert about an expiring
+ * certificate should not disappear because the inbox was cleared before it was
+ * seen. `?includeUnread=true` overrides that when the user really means it.
+ */
+export const DELETE = handle(async (req: NextRequest) => {
+  const user = await requireAuth();
+  const includeUnread = req.nextUrl.searchParams.get('includeUnread') === 'true';
+  const id = req.nextUrl.searchParams.get('id');
+
+  const filter: Record<string, unknown> = { userId: new Types.ObjectId(user.id) };
+  if (id) {
+    if (!Types.ObjectId.isValid(id)) throw BadRequest('Invalid notification id', 'INVALID_ID');
+    filter._id = new Types.ObjectId(id);
+  } else if (!includeUnread) {
+    filter.isRead = true;
   }
-}
 
-export async function DELETE(req: NextRequest) {
-  try {
-    const session = await auth();
-    if (!session?.user) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-    }
-
-    await dbConnect();
-    const userId = (session.user as { id?: string }).id;
-
-    await Notification.deleteMany({ userId });
-    return NextResponse.json({ success: true, message: 'Notifications cleared' });
-  } catch (error: unknown) {
-    console.error('Notifications DELETE error:', error);
-    return NextResponse.json({ error: 'Failed to clear notifications' }, { status: 500 });
-  }
-}
+  const result = await Notification.deleteMany(filter);
+  return ok({ deleted: result.deletedCount });
+});

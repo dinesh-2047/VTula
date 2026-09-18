@@ -1,0 +1,677 @@
+/* ═══════════════════════════════════════════
+   Regulatory Rules — Claymorphism
+
+   The editor is a long form because a rule genuinely has twenty-odd fields, so
+   the layout leans on a two-column grid with a `.fieldWide` escape hatch rather
+   than a wizard: an administrator amending a fee should not have to walk four
+   steps to reach it, and seeing validity next to fee is how you notice that a
+   two-year certificate is being sold at a one-year price.
+   ═══════════════════════════════════════════ */
+
+.page {
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+  animation: global(fadeInUp) 0.4s ease;
+}
+
+.loadingWrap {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 14px;
+  min-height: 420px;
+  color: var(--text-secondary);
+  font-size: 0.9rem;
+}
+
+.spin {
+  animation: global(claySpin) 0.8s linear infinite;
+}
+
+/* ── Header ── */
+.pageHeader {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 24px;
+  flex-wrap: wrap;
+}
+
+.pageHeader h1 {
+  font-family: var(--font-heading);
+  font-size: 1.75rem;
+  font-weight: 800;
+  color: var(--text-primary);
+  margin-bottom: 6px;
+}
+
+.pageHeader p {
+  color: var(--text-secondary);
+  font-size: 0.9rem;
+  line-height: 1.6;
+  max-width: 78ch;
+}
+
+/* ── Access gate ──
+   `/api/rules` is administrator-only, so a Legal Metrology Officer who follows a
+   stale link gets an explanation and a way back rather than a bare 403. */
+.gate {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  gap: 14px;
+  padding: 64px 32px;
+  background: var(--surface-card);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--clay-shadow-md);
+}
+
+.gate h2 {
+  font-family: var(--font-heading);
+  font-size: 1.3rem;
+  font-weight: 700;
+  color: var(--text-primary);
+}
+
+.gate p {
+  color: var(--text-secondary);
+  font-size: 0.9rem;
+  line-height: 1.65;
+  max-width: 56ch;
+}
+
+/* ── Message boxes ── */
+.errorBox,
+.noticeBox,
+.warnBox {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 13px 16px;
+  border-radius: var(--radius-md);
+  font-size: 0.85rem;
+  line-height: 1.55;
+}
+
+.errorBox {
+  background: var(--status-error-bg);
+  color: #a33c3c;
+}
+
+.noticeBox {
+  background: var(--status-success-bg);
+  color: #3f7d42;
+}
+
+.warnBox {
+  background: var(--status-warning-bg);
+  color: #8a6420;
+}
+
+.errorBox svg,
+.noticeBox svg,
+.warnBox svg {
+  flex-shrink: 0;
+  margin-top: 1px;
+}
+
+.boxDismiss {
+  margin-left: auto;
+  border: none;
+  background: none;
+  cursor: pointer;
+  color: inherit;
+  opacity: 0.6;
+  display: flex;
+  padding: 0;
+  flex-shrink: 0;
+}
+
+.boxDismiss:hover {
+  opacity: 1;
+}
+
+/* ── Effective-rule probe ──
+   Given more visual weight than the table because it answers the question the
+   page exists for. A list of rows tells you what has been configured; this tells
+   you what an applicant in a given state, with a given instrument, will meet. */
+.probe {
+  background: var(--surface-card);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--clay-shadow-md);
+  border: 1px solid rgba(123, 175, 212, 0.22);
+  overflow: hidden;
+}
+
+.probeHeader {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 20px;
+  flex-wrap: wrap;
+  padding: 20px 24px;
+  background: var(--surface-elevated);
+  border-bottom: 1px solid rgba(61, 64, 91, 0.06);
+}
+
+.probeHeader h2 {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-family: var(--font-heading);
+  font-size: 1.05rem;
+  font-weight: 700;
+  color: var(--text-primary);
+  margin-bottom: 4px;
+}
+
+.probeHeader h2 svg {
+  color: var(--color-primary);
+}
+
+.probeHeader p {
+  color: var(--text-secondary);
+  font-size: 0.82rem;
+  line-height: 1.55;
+  max-width: 62ch;
+}
+
+.probeInputs {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.probeInputs select {
+  min-width: 190px;
+  font-size: 0.85rem;
+}
+
+.probeBody {
+  padding: 22px 24px 24px;
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+.probeMatch {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.probeMatch strong {
+  font-family: var(--font-heading);
+  font-size: 1rem;
+  font-weight: 700;
+  color: var(--text-primary);
+}
+
+.probeVersion {
+  font-size: 0.75rem;
+  color: var(--text-muted);
+  font-variant-numeric: tabular-nums;
+}
+
+.probeGrid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));
+  gap: 14px;
+}
+
+.probeStat {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  padding: 14px 16px;
+  background: var(--surface-warm);
+  border-radius: var(--radius-md);
+}
+
+.probeLabel {
+  display: block;
+  font-size: 0.72rem;
+  font-weight: 600;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.4px;
+}
+
+.probeVal {
+  font-family: var(--font-heading);
+  font-size: 1.15rem;
+  font-weight: 700;
+  color: var(--text-primary);
+  font-variant-numeric: tabular-nums;
+}
+
+.probeSub {
+  font-size: 0.76rem;
+  color: var(--text-secondary);
+  line-height: 1.45;
+}
+
+.probeLists {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+  gap: 18px;
+}
+
+.probeEmpty {
+  padding: 22px 24px;
+  color: var(--text-secondary);
+  font-size: 0.85rem;
+  line-height: 1.6;
+}
+
+.feeStrip {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+  padding-top: 18px;
+  border-top: 1px dashed rgba(61, 64, 91, 0.1);
+}
+
+.feeRow {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+  margin-top: 8px;
+}
+
+/* One chip per verification type. Rupees are bold because that is the figure an
+   applicant argues about; the multiplier that produced it is an implementation
+   detail of the rule, not of the payment. */
+.feeChip {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 10px 16px;
+  min-width: 128px;
+  background: var(--surface-warm);
+  border: 1px solid rgba(61, 64, 91, 0.06);
+  border-radius: var(--radius-md);
+}
+
+.feeChip span {
+  font-size: 0.74rem;
+  color: var(--text-secondary);
+}
+
+.feeChip b {
+  font-family: var(--font-heading);
+  font-size: 1.05rem;
+  font-weight: 700;
+  color: var(--text-primary);
+  font-variant-numeric: tabular-nums;
+}
+
+/* A non-initial fee above the base one. Legal, occasionally intended, and almost
+   always a multiplier typed above 1 — so it is flagged rather than blocked. */
+.feeChipWarn {
+  background: var(--status-warning-bg);
+  border-color: rgba(245, 200, 105, 0.5);
+}
+
+.tagRow {
+  display: flex;
+  gap: 7px;
+  flex-wrap: wrap;
+  margin-top: 8px;
+}
+
+.tag {
+  padding: 5px 11px;
+  background: var(--surface-warm);
+  border-radius: var(--radius-pill);
+  font-size: 0.76rem;
+  color: var(--text-secondary);
+}
+
+.editableTag {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 8px 5px 12px;
+  background: rgba(224, 122, 95, 0.09);
+  border-radius: var(--radius-pill);
+  font-size: 0.78rem;
+  font-weight: 600;
+  color: var(--color-primary-dark);
+  font-variant-numeric: tabular-nums;
+}
+
+.editableTag button {
+  display: flex;
+  border: none;
+  background: none;
+  cursor: pointer;
+  color: inherit;
+  opacity: 0.6;
+  padding: 0;
+}
+
+.editableTag button:hover {
+  opacity: 1;
+}
+
+.legalRef {
+  font-size: 0.8rem;
+  color: var(--text-muted);
+  font-style: italic;
+}
+
+/* ── Register ── */
+.tableToolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  flex-wrap: wrap;
+}
+
+.tableToolbar h2 {
+  font-family: var(--font-heading);
+  font-size: 1.1rem;
+  font-weight: 700;
+  color: var(--text-primary);
+}
+
+.toggle {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 0.83rem;
+  color: var(--text-secondary);
+  cursor: pointer;
+}
+
+.toggle input {
+  width: 16px;
+  height: 16px;
+  accent-color: var(--color-primary);
+  cursor: pointer;
+}
+
+.numeric {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.scopeCell {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  font-family: var(--font-heading);
+  font-weight: 600;
+  font-size: 0.87rem;
+  color: var(--text-primary);
+}
+
+.scopeCell svg {
+  color: var(--text-muted);
+  flex-shrink: 0;
+}
+
+.subCell {
+  font-size: 0.74rem;
+  color: var(--text-muted);
+  line-height: 1.45;
+  margin-top: 2px;
+}
+
+.notSet {
+  font-size: 0.8rem;
+  color: var(--text-muted);
+  font-style: italic;
+}
+
+/* Superseded versions stay in the table when asked for, dimmed rather than
+   hidden — they are the record of what applied while they were in force. */
+.supersededRow {
+  opacity: 0.62;
+}
+
+.rowActions {
+  display: flex;
+  gap: 4px;
+  justify-content: flex-end;
+}
+
+.iconBtn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  border: none;
+  background: none;
+  border-radius: var(--radius-sm);
+  color: var(--text-secondary);
+  cursor: pointer;
+  transition: background 0.2s, color 0.2s;
+  flex-shrink: 0;
+}
+
+.iconBtn:hover {
+  background: var(--surface-warm);
+  color: var(--color-primary);
+}
+
+.iconBtnDanger:hover {
+  background: var(--status-error-bg);
+  color: var(--status-error);
+}
+
+.footNote {
+  font-size: 0.8rem;
+  color: var(--text-muted);
+  line-height: 1.65;
+  max-width: 92ch;
+}
+
+/* ── Editor modal ── */
+.editorModal {
+  max-width: 860px;
+  width: 100%;
+  max-height: 90vh;
+  overflow-y: auto;
+}
+
+.historyModal {
+  max-width: 720px;
+  width: 100%;
+  max-height: 85vh;
+  overflow-y: auto;
+}
+
+.modalHeader {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 16px;
+}
+
+.modalHeader h3 {
+  font-family: var(--font-heading);
+  font-size: 1.15rem;
+  font-weight: 700;
+  color: var(--text-primary);
+  margin-bottom: 3px;
+}
+
+.modalHeader p {
+  font-size: 0.8rem;
+  color: var(--text-secondary);
+}
+
+.sectionTitle {
+  font-family: var(--font-heading);
+  font-size: 0.78rem;
+  font-weight: 700;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.7px;
+  margin: 26px 0 2px;
+  padding-bottom: 8px;
+  border-bottom: 1px solid rgba(61, 64, 91, 0.07);
+}
+
+.formGrid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(230px, 1fr));
+  gap: 16px;
+  margin-top: 16px;
+}
+
+.field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 0;
+}
+
+.fieldWide {
+  grid-column: 1 / -1;
+}
+
+.field textarea {
+  resize: vertical;
+  min-height: 60px;
+  font-family: var(--font-body);
+}
+
+.hint {
+  font-size: 0.75rem;
+  color: var(--text-muted);
+  line-height: 1.5;
+}
+
+.hintWarn {
+  font-size: 0.77rem;
+  color: #8a6420;
+  line-height: 1.5;
+  margin-top: 8px;
+}
+
+.optional {
+  font-weight: 400;
+  font-size: 0.72rem;
+  color: var(--text-muted);
+  text-transform: none;
+  letter-spacing: 0;
+}
+
+.inlineAdd {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  margin-top: 8px;
+}
+
+.inlineAdd input {
+  max-width: 130px;
+}
+
+.slaTotal {
+  padding: 12px 16px;
+  background: var(--status-info-bg);
+  border-radius: var(--radius-md);
+  font-size: 0.82rem;
+  line-height: 1.6;
+  color: #2b5d7d;
+}
+
+/* Twenty-odd document types, so a multi-column checklist rather than a
+   multi-select: an administrator needs to read the whole set to decide what to
+   demand, and a collapsed control hides most of it. */
+.docGrid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(230px, 1fr));
+  gap: 4px 18px;
+  margin-top: 14px;
+}
+
+.checkRow {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  padding: 7px 2px;
+  font-size: 0.84rem;
+  color: var(--text-primary);
+  cursor: pointer;
+  line-height: 1.4;
+}
+
+.checkRow input {
+  width: 16px;
+  height: 16px;
+  accent-color: var(--color-primary);
+  cursor: pointer;
+  flex-shrink: 0;
+}
+
+.toleranceRow {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+
+.toleranceRow input:first-child {
+  flex: 1;
+  min-width: 0;
+}
+
+.toleranceRow input[type='number'] {
+  width: 96px;
+  flex-shrink: 0;
+  text-align: right;
+}
+
+.percentMark {
+  font-size: 0.85rem;
+  color: var(--text-secondary);
+  flex-shrink: 0;
+}
+
+.modalActions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+  margin-top: 26px;
+  padding-top: 18px;
+  border-top: 1px solid rgba(61, 64, 91, 0.07);
+}
+
+/* ── Responsive ── */
+@media (max-width: 768px) {
+  .pageHeader {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .probeInputs {
+    width: 100%;
+  }
+
+  .probeInputs select {
+    flex: 1;
+    min-width: 0;
+  }
+
+  .formGrid,
+  .docGrid {
+    grid-template-columns: 1fr;
+  }
+
+  .modalActions {
+    flex-direction: column-reverse;
+  }
+}

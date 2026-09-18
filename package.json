@@ -6,7 +6,9 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "eslint"
+    "lint": "eslint",
+    "migrate": "node --env-file-if-exists=.env --env-file-if-exists=.env.local --import ./scripts/alias-hook-register.mjs ./scripts/migrate.mts",
+    "create-admin": "node --env-file-if-exists=.env --env-file-if-exists=.env.local --import ./scripts/alias-hook-register.mjs ./scripts/create-admin.mts"
   },
   "dependencies": {
     "@react-pdf/renderer": "^4.6.1",

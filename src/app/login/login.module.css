@@ -24,7 +24,7 @@
   height: 500px;
   border-radius: 50%;
   background: radial-gradient(circle, rgba(224, 122, 95, 0.1) 0%, transparent 70%);
-  animation: clayFloat 8s ease-in-out infinite;
+  animation: global(clayFloat) 8s ease-in-out infinite;
 }
 
 .orb2 {
@@ -35,7 +35,7 @@
   height: 500px;
   border-radius: 50%;
   background: radial-gradient(circle, rgba(129, 178, 154, 0.1) 0%, transparent 70%);
-  animation: clayFloat 10s ease-in-out infinite;
+  animation: global(clayFloat) 10s ease-in-out infinite;
   animation-delay: -4s;
 }
 
@@ -84,7 +84,7 @@
   box-shadow: var(--clay-shadow-xl);
   padding: 40px 36px;
   border: 1px solid rgba(255, 255, 255, 0.8);
-  animation: fadeInUp 0.5s ease;
+  animation: global(fadeInUp) 0.5s ease;
 }
 
 .cardHeader {
@@ -191,7 +191,7 @@
 }
 
 .spin {
-  animation: claySpin 0.8s linear infinite;
+  animation: global(claySpin) 0.8s linear infinite;
 }
 
 @media (max-width: 480px) {

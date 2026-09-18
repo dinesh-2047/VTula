@@ -1,10 +1,26 @@
+/*
+ * Public verification pages.
+ *
+ * Laid out top-down rather than vertically centred: the result page is now a long
+ * document (identity, validity, issuer, inspection, authenticity, history), and the
+ * old `align-items: center` on a flex column pushed the verdict off-screen as soon
+ * as there was more than a card's worth of content.
+ *
+ * Note the `global(...)` wrapper on animation names defined in `globals.css`.
+ * CSS Modules rewrites the identifier in an `animation:` declaration into this
+ * file's scope, so naming a keyframe that only exists globally resolves to
+ * nothing and the animation silently does not run — which is what was happening
+ * to the orbs here and, more visibly, to the `.spin` loading indicator.
+ * `global()` opts that one identifier out. Keyframes defined in this file
+ * (`pulseScanner`) are referenced bare, as normal.
+ */
+
 .page {
   min-height: 100vh;
   display: flex;
-  align-items: center;
   justify-content: center;
   position: relative;
-  padding: 32px;
+  padding: 32px 24px 64px;
 }
 
 .background {
@@ -22,7 +38,7 @@
   height: 600px;
   border-radius: 50%;
   background: radial-gradient(circle, rgba(129, 178, 154, 0.1) 0%, transparent 70%);
-  animation: clayFloat 10s ease-in-out infinite;
+  animation: global(clayFloat) 10s ease-in-out infinite;
 }
 
 .orb2 {
@@ -33,16 +49,24 @@
   height: 500px;
   border-radius: 50%;
   background: radial-gradient(circle, rgba(224, 122, 95, 0.08) 0%, transparent 70%);
-  animation: clayFloat 8s ease-in-out infinite;
+  animation: global(clayFloat) 8s ease-in-out infinite;
   animation-delay: -3s;
 }
 
 .container {
   width: 100%;
-  max-width: 640px;
+  max-width: 680px;
   display: flex;
   flex-direction: column;
+  gap: 20px;
+}
+
+.topBar {
+  display: flex;
   align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  flex-wrap: wrap;
 }
 
 .backLink {
@@ -54,17 +78,17 @@
   font-size: 0.85rem;
   color: var(--text-secondary);
   text-decoration: none;
-  margin-bottom: 32px;
-  align-self: flex-start;
 }
 
 .backLink:hover {
   color: var(--color-primary);
 }
 
+/* ── Landing page ── */
+
 .header {
   text-align: center;
-  margin-bottom: 40px;
+  margin: 12px 0 8px;
 }
 
 .logoIcon {
@@ -84,25 +108,32 @@
 }
 
 .header h1 {
-  font-size: 2.25rem;
+  font-size: 2rem;
   font-weight: 800;
   margin-bottom: 12px;
+  line-height: 1.2;
 }
 
 .header p {
   color: var(--text-secondary);
-  font-size: 1rem;
+  font-size: 0.98rem;
   line-height: 1.6;
-  max-width: 480px;
+  max-width: 520px;
   margin: 0 auto;
 }
 
-/* Search */
+/* ── Lookup form and scanner ── */
+
+.lookup {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
 .searchForm {
   width: 100%;
   display: flex;
   gap: 12px;
-  margin-bottom: 32px;
 }
 
 .searchInput {
@@ -117,6 +148,7 @@
   box-shadow: var(--clay-shadow-sm);
   color: var(--text-muted);
   transition: all 0.3s;
+  min-width: 0;
 }
 
 .searchInput:focus-within {
@@ -126,128 +158,117 @@
 
 .searchInput input {
   flex: 1;
+  min-width: 0;
   border: none;
   background: none;
   outline: none;
   font-family: var(--font-body);
   font-size: 0.95rem;
   color: var(--text-primary);
+  text-transform: uppercase;
 }
 
 .searchInput input::placeholder {
   color: var(--text-muted);
+  text-transform: none;
 }
 
-/* Result */
-.result {
-  width: 100%;
-  animation: fadeInUp 0.4s ease;
-}
-
-.resultCard {
-  background: var(--surface-card);
-  border-radius: var(--radius-xl);
-  box-shadow: var(--clay-shadow-lg);
-  padding: 40px 36px;
-  text-align: center;
-  border: 2px solid transparent;
-}
-
-.resultValid {
-  border-color: rgba(123, 198, 126, 0.3);
-}
-
-.resultExpired {
-  border-color: rgba(245, 200, 105, 0.3);
-}
-
-.resultInvalid {
-  border-color: rgba(229, 115, 115, 0.3);
-}
-
-.resultIcon {
-  margin-bottom: 20px;
-}
-
-.resultValid .resultIcon { color: var(--status-success); }
-.resultExpired .resultIcon { color: var(--status-warning); }
-.resultInvalid .resultIcon { color: var(--status-error); }
-
-.resultCard h2 {
-  font-size: 1.5rem;
-  font-weight: 800;
-  margin-bottom: 8px;
-}
-
-.resultSubtitle {
-  color: var(--text-secondary);
-  font-size: 0.9rem;
-  margin-bottom: 28px;
-}
-
-.certDetails {
-  text-align: left;
-  background: var(--surface-warm);
-  border-radius: var(--radius-lg);
-  padding: 20px;
-  margin-bottom: 20px;
-}
-
-.certRow {
+.clearBtn {
+  background: none;
+  border: none;
+  cursor: pointer;
+  color: var(--text-muted);
   display: flex;
+  padding: 2px;
+}
+
+.clearBtn:hover {
+  color: var(--color-primary);
+}
+
+.scanPanel {
+  display: flex;
+  flex-direction: column;
   align-items: center;
+  gap: 12px;
+}
+
+.scanActions {
+  display: flex;
   gap: 10px;
-  padding: 10px 0;
-  border-bottom: 1px dashed rgba(61, 64, 91, 0.08);
-  font-size: 0.9rem;
+  flex-wrap: wrap;
+  justify-content: center;
 }
 
-.certRow:last-child { border-bottom: none; }
-
-.certRow svg {
-  color: var(--text-muted);
-  flex-shrink: 0;
-}
-
-.certRow span {
-  color: var(--text-muted);
-  min-width: 120px;
-}
-
-.certRow strong {
-  color: var(--text-primary);
+/* A styled <label> wrapping a hidden file input, so it matches the buttons
+   beside it without a click-through shim. */
+.uploadBtn {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-family: var(--font-heading);
   font-weight: 600;
+  font-size: 0.88rem;
+  padding: 10px 18px;
+  border-radius: var(--radius-pill);
+  background: var(--surface-card);
+  color: var(--text-secondary);
+  box-shadow: var(--clay-shadow-sm);
+  cursor: pointer;
+  transition: all 0.25s;
 }
 
-.expired {
-  color: var(--status-error) !important;
+.uploadBtn:hover {
+  color: var(--color-primary);
+  box-shadow: var(--clay-shadow-md);
 }
 
-.certBadge {
-  margin-top: 8px;
+.uploadBtn input {
+  display: none;
 }
 
-/* Footer */
-.footer {
-  margin-top: 40px;
+.scanHint {
+  font-size: 0.84rem;
+  color: var(--text-secondary);
   text-align: center;
+  max-width: 380px;
+  margin: 0;
 }
 
-.footer p {
-  font-size: 0.8rem;
-  color: var(--text-muted);
+.scanUnsupported,
+.scanErrorBox {
+  display: flex;
+  align-items: flex-start;
+  gap: 9px;
+  font-size: 0.84rem;
+  line-height: 1.5;
+  padding: 12px 14px;
+  border-radius: var(--radius-md);
+  margin: 0;
 }
 
-.spin {
-  animation: claySpin 0.8s linear infinite;
+.scanUnsupported {
+  background: var(--surface-warm);
+  color: var(--text-secondary);
 }
 
-/* QR Camera Scanner Box */
+.scanErrorBox {
+  background: rgba(224, 122, 95, 0.12);
+  color: #9c3b21;
+  border: 1px solid rgba(224, 122, 95, 0.34);
+}
+
+.scanUnsupported svg,
+.scanErrorBox svg {
+  flex-shrink: 0;
+  margin-top: 2px;
+}
+
 .cameraBox {
   position: relative;
   width: 100%;
-  max-width: 380px;
-  height: 260px;
+  max-width: 400px;
+  aspect-ratio: 4 / 3;
   border-radius: var(--radius-lg);
   overflow: hidden;
   background: #000;
@@ -266,12 +287,11 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  background: rgba(0, 0, 0, 0.3);
 }
 
 .scannerTarget {
-  width: 180px;
-  height: 180px;
+  width: 62%;
+  aspect-ratio: 1;
   border: 3px solid var(--color-secondary);
   border-radius: var(--radius-md);
   box-shadow: 0 0 0 4000px rgba(0, 0, 0, 0.4);
@@ -279,35 +299,687 @@
 }
 
 @keyframes pulseScanner {
-  0% { border-color: var(--color-secondary); box-shadow: 0 0 0 4000px rgba(0, 0, 0, 0.4), 0 0 15px rgba(129, 178, 154, 0.8); }
-  50% { border-color: var(--color-primary); box-shadow: 0 0 0 4000px rgba(0, 0, 0, 0.4), 0 0 25px rgba(224, 122, 95, 0.9); }
-  100% { border-color: var(--color-secondary); box-shadow: 0 0 0 4000px rgba(0, 0, 0, 0.4), 0 0 15px rgba(129, 178, 154, 0.8); }
+  0%,
+  100% {
+    border-color: var(--color-secondary);
+    box-shadow: 0 0 0 4000px rgba(0, 0, 0, 0.4), 0 0 15px rgba(129, 178, 154, 0.8);
+  }
+  50% {
+    border-color: var(--color-primary);
+    box-shadow: 0 0 0 4000px rgba(0, 0, 0, 0.4), 0 0 25px rgba(224, 122, 95, 0.9);
+  }
 }
 
-.uploadDropzone {
-  width: 100%;
-  height: 180px;
-  border: 2px dashed var(--color-primary);
-  border-radius: var(--radius-lg);
-  background: var(--surface-warm);
+/* ── "Three ways to check" ── */
+
+.howCard {
+  background: var(--surface-card);
+  border-radius: var(--radius-xl);
+  box-shadow: var(--clay-shadow-sm);
+  padding: 24px 26px;
+}
+
+.howCard h2 {
+  font-family: var(--font-heading);
+  font-size: 1rem;
+  font-weight: 800;
+  margin: 0 0 16px;
+}
+
+.howList {
+  list-style: none;
+  margin: 0;
+  padding: 0;
   display: flex;
   flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  gap: 8px;
-  cursor: pointer;
-  transition: all 0.3s;
+  gap: 16px;
+  counter-reset: how;
 }
 
-.uploadDropzone:hover {
-  background: rgba(224, 122, 95, 0.08);
-  border-color: var(--color-primary-dark);
+.howList li {
+  display: flex;
+  gap: 12px;
+  align-items: flex-start;
+}
+
+.howList svg {
+  color: var(--color-secondary-dark);
+  flex-shrink: 0;
+  margin-top: 2px;
+}
+
+.howList strong {
+  display: block;
+  font-size: 0.9rem;
+  margin-bottom: 3px;
+}
+
+.howList span {
+  font-size: 0.85rem;
+  color: var(--text-secondary);
+  line-height: 1.55;
+}
+
+.howList code {
+  font-size: 0.82rem;
+  background: var(--surface-warm);
+  padding: 1px 6px;
+  border-radius: 5px;
+}
+
+/* An inline route out of the page, for the reader whose sticker is missing —
+   underlined rather than merely coloured, because this one is load-bearing. */
+.inlineLink {
+  color: var(--color-primary-dark);
+  font-weight: 600;
+  text-decoration: underline;
+  text-decoration-thickness: 1px;
+  text-underline-offset: 2px;
+}
+
+.inlineLink:hover {
+  color: var(--color-primary);
+}
+
+/* ── The verdict ── */
+
+.verdict {
+  background: var(--surface-card);
+  border-radius: var(--radius-xl);
+  box-shadow: var(--clay-shadow-lg);
+  padding: 36px 32px 30px;
+  text-align: center;
+  border: 2px solid transparent;
+  animation: global(fadeInUp) 0.35s ease;
+}
+
+.verdictOk {
+  border-color: rgba(123, 198, 126, 0.4);
+  background: linear-gradient(180deg, rgba(129, 178, 154, 0.09), var(--surface-card) 60%);
+}
+
+.verdictWarn {
+  border-color: rgba(245, 200, 105, 0.45);
+  background: linear-gradient(180deg, rgba(244, 162, 97, 0.11), var(--surface-card) 60%);
+}
+
+.verdictBad {
+  border-color: rgba(229, 115, 115, 0.42);
+  background: linear-gradient(180deg, rgba(224, 122, 95, 0.11), var(--surface-card) 60%);
+}
+
+.verdictIcon {
+  margin-bottom: 16px;
+}
+
+.verdictOk .verdictIcon {
+  color: var(--status-success);
+}
+.verdictWarn .verdictIcon {
+  color: var(--status-warning);
+}
+.verdictBad .verdictIcon {
+  color: var(--status-error);
+}
+
+.verdict h1 {
+  font-size: 1.5rem;
+  font-weight: 800;
+  line-height: 1.25;
+  margin: 0 0 10px;
+}
+
+.verdictDetail {
+  color: var(--text-secondary);
+  font-size: 0.92rem;
+  line-height: 1.6;
+  margin: 0 auto;
+  max-width: 520px;
+}
+
+.verdictCertNo {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin: 18px 0 0;
+  font-family: var(--font-heading);
+  font-weight: 700;
+  font-size: 0.92rem;
+  letter-spacing: 0.02em;
+  background: var(--surface-warm);
+  padding: 7px 14px;
+  border-radius: var(--radius-pill);
+}
+
+.verdictCertNo span {
+  font-weight: 500;
+  color: var(--text-muted);
+}
+
+/* The one sentence a customer at the counter actually needs. */
+.tradeLine {
+  margin: 16px 0 0;
+  font-family: var(--font-heading);
+  font-weight: 700;
+  font-size: 0.95rem;
+}
+
+.verdictOk .tradeLine {
+  color: #2e7d32;
+}
+.verdictWarn .tradeLine {
+  color: #8a5312;
+}
+.verdictBad .tradeLine {
+  color: #c62828;
+}
+
+.supersededBox {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  background: rgba(244, 162, 97, 0.13);
+  border: 1px solid rgba(244, 162, 97, 0.4);
+  border-radius: var(--radius-lg);
+  padding: 16px 18px;
+}
+
+.supersededBox svg {
+  color: #8a5312;
+  flex-shrink: 0;
+}
+
+.supersededBox > div {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.supersededBox strong {
+  font-size: 0.9rem;
+}
+
+.supersededBox span {
+  font-size: 0.83rem;
+  color: var(--text-secondary);
+  line-height: 1.5;
+}
+
+/* ── Detail cards ── */
+
+.card {
+  background: var(--surface-card);
+  border-radius: var(--radius-xl);
+  box-shadow: var(--clay-shadow-sm);
+  padding: 24px 26px;
+}
+
+.card h2 {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  font-family: var(--font-heading);
+  font-size: 0.8rem;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--text-muted);
+  margin: 0 0 16px;
+}
+
+.card h2 svg {
+  color: var(--color-primary);
+}
+
+.detailList {
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.detailRow {
+  display: flex;
+  align-items: baseline;
+  gap: 12px;
+  padding: 10px 0;
+  border-bottom: 1px dashed rgba(61, 64, 91, 0.08);
+  font-size: 0.9rem;
+}
+
+.detailRow:last-child {
+  border-bottom: none;
+}
+
+.detailRow dt {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  color: var(--text-muted);
+  min-width: 150px;
+  flex-shrink: 0;
+  font-size: 0.85rem;
+}
+
+.detailRow dt svg {
+  flex-shrink: 0;
+}
+
+.detailRow dd {
+  margin: 0;
+  font-weight: 600;
+  color: var(--text-primary);
+  overflow-wrap: anywhere;
+}
+
+.detailRow code {
+  font-size: 0.86rem;
+  background: var(--surface-warm);
+  padding: 2px 7px;
+  border-radius: 5px;
+  letter-spacing: 0.03em;
+}
+
+.badText {
+  color: var(--status-error);
+}
+
+.matchNote {
+  font-size: 0.82rem;
+  color: var(--text-secondary);
+  line-height: 1.55;
+  margin: 14px 0 0;
+}
+
+.countNote {
+  font-size: 0.78rem;
+  color: var(--text-muted);
+  margin: 8px 0 0;
+}
+
+/* ── Authenticity ── */
+
+.integrityOk {
+  border-left: 4px solid var(--status-success);
+}
+
+.integrityBad {
+  border-left: 4px solid var(--status-error);
+  background: rgba(224, 122, 95, 0.06);
+}
+
+.integrityList {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 9px;
+}
+
+.integrityList li {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  font-size: 0.88rem;
+}
+
+.integrityOk .integrityList svg {
+  color: var(--status-success);
+}
+
+.integrityBad .integrityList svg {
+  color: var(--status-error);
+}
+
+/* ── History ── */
+
+.timeline {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.timeline li {
+  display: flex;
+  gap: 14px;
+  padding-bottom: 18px;
+  position: relative;
+}
+
+.timeline li:not(:last-child)::before {
+  content: '';
+  position: absolute;
+  left: 5px;
+  top: 16px;
+  bottom: 0;
+  width: 2px;
+  background: rgba(61, 64, 91, 0.12);
+}
+
+.timeline li:last-child {
+  padding-bottom: 0;
+}
+
+.timelineDot {
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  background: var(--color-secondary);
+  flex-shrink: 0;
+  margin-top: 5px;
+  z-index: 1;
+}
+
+.timeline strong {
+  display: block;
+  font-family: var(--font-heading);
+  font-size: 0.82rem;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--color-primary-dark);
+}
+
+.timeline p {
+  font-size: 0.86rem;
+  color: var(--text-secondary);
+  line-height: 1.55;
+  margin: 4px 0 3px;
+}
+
+.timeline time {
+  font-size: 0.76rem;
+  color: var(--text-muted);
+}
+
+/* ── Share ── */
+
+.shareRow {
+  display: flex;
+  gap: 20px;
+  align-items: flex-start;
+}
+
+.shareQr {
+  border-radius: 14px;
+  background: white;
+  padding: 8px;
+  box-shadow: var(--clay-shadow-sm);
+  flex-shrink: 0;
+}
+
+.shareRow > div {
+  flex: 1;
+  min-width: 0;
+}
+
+.shareRow .matchNote {
+  margin-top: 0;
+}
+
+.shareUrl {
+  display: block;
+  margin-top: 10px;
+  font-size: 0.78rem;
+  background: var(--surface-warm);
+  padding: 8px 10px;
+  border-radius: var(--radius-md);
+  color: var(--text-secondary);
+  overflow-wrap: anywhere;
+}
+
+/* ── Public complaint intake ── */
+
+.reportCard {
+  padding: 0;
+  overflow: hidden;
+}
+
+.reportToggle {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  gap: 13px;
+  background: none;
+  border: none;
+  cursor: pointer;
+  text-align: left;
+  padding: 20px 26px;
+  font-family: inherit;
+  color: inherit;
+}
+
+.reportToggle:hover {
+  background: var(--surface-warm);
+}
+
+.reportToggle > svg:first-child {
+  color: var(--color-primary);
+  flex-shrink: 0;
+}
+
+.reportToggle > span {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.reportToggle strong {
+  font-family: var(--font-heading);
+  font-size: 0.94rem;
+  font-weight: 800;
+}
+
+.reportToggle em {
+  font-style: normal;
+  font-size: 0.83rem;
+  color: var(--text-secondary);
+  line-height: 1.5;
+}
+
+.chevronOpen {
+  transform: rotate(180deg);
+}
+
+.reportForm {
+  display: flex;
+  flex-direction: column;
+  gap: 15px;
+  padding: 4px 26px 24px;
+  border-top: 1px dashed rgba(61, 64, 91, 0.1);
+  margin-top: 0;
+  padding-top: 20px;
+}
+
+.field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.field > span {
+  font-family: var(--font-heading);
+  font-size: 0.82rem;
+  font-weight: 700;
+  color: var(--text-secondary);
+}
+
+.fieldHint {
+  font-style: normal;
+  font-size: 0.76rem;
+  color: var(--text-muted);
+}
+
+.checkLine {
+  display: flex;
+  align-items: flex-start;
+  gap: 9px;
+  font-size: 0.84rem;
+  color: var(--text-secondary);
+  line-height: 1.5;
+  cursor: pointer;
+}
+
+.checkLine input {
+  margin-top: 3px;
+  flex-shrink: 0;
+}
+
+.contactGrid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+  gap: 12px;
+}
+
+.reportWarn {
+  display: flex;
+  align-items: flex-start;
+  gap: 9px;
+  font-size: 0.83rem;
+  line-height: 1.5;
+  background: rgba(224, 122, 95, 0.12);
+  color: #9c3b21;
+  border: 1px solid rgba(224, 122, 95, 0.34);
+  border-radius: var(--radius-md);
+  padding: 11px 13px;
+  margin: 0;
+}
+
+.reportWarn svg {
+  flex-shrink: 0;
+  margin-top: 2px;
+}
+
+/* Inside the warning box the surrounding text is already terracotta, so the link
+   inherits it and is distinguished by weight and underline instead. Recolouring
+   it here would lose contrast against the tinted background. */
+.reportWarn .inlineLink {
+  color: inherit;
+}
+
+.reportActions {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  flex-wrap: wrap;
+}
+
+.reportActions .matchNote {
+  margin: 0;
+  flex: 1;
+  min-width: 180px;
+  font-size: 0.76rem;
+}
+
+.reportFiled {
+  border-left: 4px solid var(--status-success);
+}
+
+.reportFiled h2 svg {
+  color: var(--status-success);
+}
+
+.reportRef {
+  font-family: var(--font-heading);
+  font-size: 1.3rem;
+  font-weight: 800;
+  letter-spacing: 0.03em;
+  margin: 0;
+  color: var(--color-primary-dark);
+}
+
+/* ── Footer ── */
+
+/* The complaint call-out. Warmer than `.howCard` on purpose: the lookup card
+   above is neutral information, this one is an invitation to act. */
+.complainCard {
+  display: flex;
+  align-items: flex-start;
+  gap: 14px;
+  margin-top: 18px;
+  padding: 20px 22px;
+  border-radius: var(--radius-xl);
+  background: var(--surface-card);
+  box-shadow: var(--clay-shadow-sm);
+  border-left: 4px solid var(--color-accent);
+}
+
+.complainCard > svg {
+  color: var(--color-accent-dark);
+  flex-shrink: 0;
+  margin-top: 2px;
+}
+
+.complainCard > div {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.complainCard strong {
+  font-size: 0.95rem;
+  color: var(--text-primary);
+}
+
+.complainCard span {
+  font-size: 0.86rem;
+  color: var(--text-secondary);
+  line-height: 1.6;
+}
+
+.footer {
+  margin-top: 12px;
+  text-align: center;
+}
+
+.footer p {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  font-size: 0.8rem;
+  color: var(--text-muted);
+}
+
+.spin {
+  animation: global(claySpin) 0.8s linear infinite;
 }
 
 @media (max-width: 640px) {
-  .searchForm { flex-direction: column; }
-  .resultCard { padding: 28px 20px; }
-  .certRow { flex-wrap: wrap; }
-  .certRow span { min-width: 100px; }
+  .page {
+    padding: 20px 16px 48px;
+  }
+  .searchForm {
+    flex-direction: column;
+  }
+  .verdict {
+    padding: 28px 20px 24px;
+  }
+  .verdict h1 {
+    font-size: 1.28rem;
+  }
+  .card,
+  .howCard {
+    padding: 20px 18px;
+  }
+  .reportToggle {
+    padding: 18px;
+  }
+  .reportForm {
+    padding: 18px 18px 20px;
+  }
+  .detailRow {
+    flex-direction: column;
+    gap: 4px;
+  }
+  .detailRow dt {
+    min-width: 0;
+  }
+  .shareRow {
+    flex-direction: column;
+    align-items: center;
+    text-align: center;
+  }
 }
-

@@ -2,7 +2,20 @@
    VTULA — Claymorphism + Organic Design System
    ═══════════════════════════════════════════════════════════════ */
 
-@import url('https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700;800;900&family=Inter:wght@300;400;500;600;700&display=swap');
+/*
+ * Fonts come from `next/font` in `src/app/layout.tsx`, not from a stylesheet import.
+ *
+ * There used to be an `@import url('https://fonts.googleapis.com/css2?…')` here, for
+ * the same two families the root layout already self-hosts. Three things followed
+ * from it. The self-hosted copies were downloaded and preloaded on every page and
+ * then never used, because the literal names in the stack below resolved to the CDN's
+ * registration instead — so every visitor paid for both. The import is render-
+ * blocking and chained (the browser has to fetch the CSS before it discovers the
+ * woff2), which is the layout shift `next/font` exists to remove. And it disclosed
+ * every visitor's IP address and user agent to a third party on every page load,
+ * which for a government portal that citizens are asked to use anonymously to check
+ * a shopkeeper's weighing scale is not a detail.
+ */
 
 /* ── CSS Custom Properties ── */
 :root {
@@ -91,9 +104,31 @@
     inset 0 -4px 10px rgba(94, 145, 120, 0.15),
     inset 0 4px 10px rgba(255, 255, 255, 0.5);
 
-  /* Fonts */
-  --font-heading: 'Outfit', sans-serif;
-  --font-body: 'Inter', sans-serif;
+  /*
+   * Fonts.
+   *
+   * These read `--font-outfit` / `--font-inter`, which is what `next/font` actually
+   * defines. They used to name the families literally — `'Outfit', sans-serif` —
+   * which resolved only because of the Google Fonts `@import` removed at the top of
+   * this file: `next/font` self-hosts under a hashed family name and exposes it
+   * through a CSS variable on `<html>`, so the literal name never reaches the copy
+   * the build downloaded. Naming the variable is what makes the self-hosted font the
+   * one that gets used, and the third-party request unnecessary.
+   *
+   * The literal name is kept as the inner fallback so a locally-installed copy is
+   * still used if the variable is ever missing — without a fallback inside `var()`,
+   * an undefined variable makes the whole declaration invalid and the family
+   * inherits.
+   *
+   * `--font-devanagari` sits last before the generic: fallback is resolved per
+   * character, so Latin text never reaches it and Hindi text does. Before it was
+   * added, Hindi had no webfont at any point in the product — both Latin families are
+   * loaded `subsets: ['latin']`, correctly, since neither covers Devanagari — so every
+   * Hindi string fell through to whatever the reader's device happened to have
+   * installed, and on a device with nothing suitable, to boxes.
+   */
+  --font-heading: var(--font-outfit, 'Outfit'), var(--font-devanagari, 'Noto Sans Devanagari'), sans-serif;
+  --font-body: var(--font-inter, 'Inter'), var(--font-devanagari, 'Noto Sans Devanagari'), sans-serif;
 
   /* Transitions */
   --transition-fast: 150ms cubic-bezier(0.4, 0, 0.2, 1);

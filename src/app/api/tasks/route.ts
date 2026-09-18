@@ -1,148 +1,136 @@
-import { NextRequest, NextResponse } from 'next/server';
-import { auth } from '@/lib/auth';
-import dbConnect from '@/lib/db';
+import { NextRequest } from 'next/server';
+import { Types } from 'mongoose';
 import Application from '@/models/Application';
-import Certificate from '@/models/Certificate';
-import Instrument from '@/models/Instrument';
-import User from '@/models/User';
-import { generateCertNo, signCertificateData } from '@/lib/utils';
+import Inspection from '@/models/Inspection';
+import Schedule from '@/models/Schedule';
+import RiskFlag from '@/models/RiskFlag';
+import { handle, ok, requireOfficial, scopeFilter } from '@/lib/rbac';
+import { availableTransitions } from '@/lib/workflow';
+import { OFFICER_QUEUE_STATUSES, type ApplicationStatus, APPLICATION_STATUSES } from '@/lib/constants';
 
-// GET: Fetch pending inspection tasks for LMO / GATC
-export async function GET(req: NextRequest) {
-  try {
-    const session = await auth();
-    if (!session?.user) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-    }
+/**
+ * The officer / GATC work queue.
+ *
+ * This endpoint used to be the single worst hole in the system:
+ *
+ *  - **GET** read `session.user.role` into a variable it then never used, and
+ *    ran `Application.find({})` — so any signed-in account, including a business
+ *    owner, received every application in the country, populated with other
+ *    businesses' owner names, emails and phone numbers.
+ *  - **POST** had no role check whatsoever. Any authenticated caller could send
+ *    `{ applicationId, verdict: 'Approve' }` and the route would write an
+ *    approval and mint a real HMAC-signed certificate with a hardcoded one-year
+ *    validity, no audit entry and no notification.
+ *
+ * It is now read-only and officials-only. Acting on a task happens through the
+ * endpoints that own those concerns and audit them:
+ *   - `POST /api/applications/[id]/transition` — stage changes and decisions
+ *   - `POST /api/inspections`                  — recording an inspection
+ *   - `POST /api/schedules`                    — assigning and scheduling
+ */
 
-    await dbConnect();
-    const userRole = (session.user as { role?: string }).role;
+export const GET = handle(async (req: NextRequest) => {
+  const user = await requireOfficial('tasks.list');
+  const sp = req.nextUrl.searchParams;
 
-    // Fetch submitted or pending applications
-    const applications = await Application.find({})
-      .populate('instrumentId')
-      .populate('ownerId', 'name email phone organizationName')
-      .populate('certificateId')
-      .sort({ createdAt: -1 })
-      .lean();
+  const scope = scopeFilter(user, {
+    stateField: 'jurisdiction.state',
+    districtField: 'jurisdiction.district',
+    assigneeField: 'assignedTo',
+  });
 
-    return NextResponse.json({ success: true, applications });
-  } catch (error: unknown) {
-    console.error('Tasks GET error:', error);
-    return NextResponse.json({ error: 'Failed to fetch tasks' }, { status: 500 });
+  const query: Record<string, unknown> = { ...scope };
+
+  const statusParam = sp.get('status');
+  if (statusParam && statusParam !== 'all') {
+    const wanted = statusParam
+      .split(',')
+      .map((s) => s.trim().toUpperCase())
+      .filter((s): s is ApplicationStatus =>
+        (APPLICATION_STATUSES as readonly string[]).includes(s)
+      );
+    query.status = { $in: wanted.length > 0 ? wanted : OFFICER_QUEUE_STATUSES };
+  } else {
+    query.status = { $in: OFFICER_QUEUE_STATUSES };
   }
-}
 
-// POST: Issue certificate / complete inspection for an application
-export async function POST(req: NextRequest) {
-  try {
-    const session = await auth();
-    if (!session?.user) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-    }
+  if (sp.get('assignedToMe') === 'true') query.assignedTo = new Types.ObjectId(user.id);
 
-    const { applicationId, verdict, remarks, stampNo, photos, readings, gpsLat, gpsLng } = await req.json();
+  const type = sp.get('type');
+  if (type && type !== 'all') query.type = type;
 
-    if (!applicationId || !verdict) {
-      return NextResponse.json({ error: 'Application ID and verdict are required' }, { status: 400 });
-    }
-
-    await dbConnect();
-
-    const application = await Application.findById(applicationId).populate('instrumentId').populate('ownerId');
-    if (!application) {
-      return NextResponse.json({ error: 'Application not found' }, { status: 404 });
-    }
-
-    const userRole = (session.user as { role?: string }).role || 'LMO';
-    const userId = (session.user as { id?: string }).id;
-    const userName = session.user.name || 'Officer';
-
-    // Prepare inspection data object
-    const inspectionData = {
-      readings: readings || 'Standard Tolerance Compliance',
-      remarks: remarks || 'Verified as per Legal Metrology Rules',
-      photos: (photos || []).map((p: string) => ({
-        url: p,
-        gpsLat: gpsLat || undefined,
-        gpsLng: gpsLng || undefined,
-        timestamp: new Date(),
-      })),
-      result: verdict === 'Approve' ? 'Pass' : 'Fail',
-    };
-
-    if (verdict === 'Approve') {
-      const certNo = generateCertNo();
-      const expiryDate = new Date();
-      expiryDate.setFullYear(expiryDate.getFullYear() + 1);
-
-      const inst = application.instrumentId as any;
-      const owner = application.ownerId as any;
-
-      const dataToSign = `${certNo}:${inst._id}:${owner._id}:${expiryDate.toISOString()}:${userId}`;
-      const digitalSignature = signCertificateData(dataToSign);
-
-      const newCert = await Certificate.create({
-        certNo,
-        applicationId: application._id,
-        instrumentId: inst._id,
-        ownerId: owner._id,
-        issuedDate: new Date(),
-        expiryDate,
-        issuedBy: userId,
-        issuedByRole: userRole === 'GATC' ? 'GATC' : 'LMO',
-        instrumentSnapshot: {
-          type: inst.type,
-          brand: inst.brand,
-          model: inst.model,
-          serialNo: inst.serialNo,
-          capacity: inst.capacity,
-        },
-        ownerSnapshot: {
-          name: owner.name,
-          email: owner.email,
-          phone: owner.phone,
-        },
-        dataHash: dataToSign,
-        digitalSignature,
-        status: 'Active',
-      });
-
-      // Update application
-      application.status = 'Approved';
-      application.certificateId = newCert._id;
-      application.remarks = remarks || `Verified & Stamped by ${userName} (Stamp No: ${stampNo || 'N/A'})`;
-      application.assignedTo = userId as any;
-      application.assignedType = userRole === 'GATC' ? 'GATC' : 'LMO';
-      application.inspectionData = inspectionData as any;
-      await application.save();
-
-      // Update instrument
-      await Instrument.findByIdAndUpdate(inst._id, {
-        status: 'Verified',
-        lastVerifiedDate: new Date(),
-        nextVerificationDue: expiryDate,
-        currentCertificateId: newCert._id,
-      });
-
-      return NextResponse.json({ success: true, certificate: newCert });
-    } else {
-      application.status = 'Rejected';
-      application.remarks = remarks || `Rejected by ${userName}`;
-      application.inspectionData = inspectionData as any;
-      application.assignedTo = userId as any;
-      await application.save();
-
-      if (application.instrumentId) {
-        await Instrument.findByIdAndUpdate(application.instrumentId._id, {
-          status: 'Rejected',
-        });
-      }
-
-      return NextResponse.json({ success: true, message: 'Application rejected' });
-    }
-  } catch (error: unknown) {
-    console.error('Inspection completion error:', error);
-    return NextResponse.json({ error: 'Failed to complete inspection' }, { status: 500 });
+  const search = sp.get('search')?.trim();
+  if (search) {
+    query.applicationNo = { $regex: search.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), $options: 'i' };
   }
-}
+
+  const limit = Math.min(100, Math.max(1, Number(sp.get('limit')) || 50));
+
+  const applications = await Application.find(query)
+    .populate('instrumentId', 'type brand model serialNo capacity accuracyClass address installationDistrict installationState gpsCoordinates capacityValue capacityUnit')
+    .populate('ownerId', 'name organizationName phone email')
+    .populate('assignedTo', 'name role designation')
+    // Highest advisory priority first. The score is explainable via
+    // `priorityReasons`, which the UI shows — the order is never unexplained.
+    .sort({ priorityScore: -1, dueDate: 1, createdAt: 1 })
+    .limit(limit)
+    .lean();
+
+  const appIds = applications.map((a) => a._id);
+
+  const [inspections, schedules, flags] = await Promise.all([
+    Inspection.find({ applicationId: { $in: appIds }, isSuperseded: false })
+      .select('_id applicationId inspectionNo version result isSubmitted inspectedAt readings gpsDriftMetres')
+      .lean(),
+    Schedule.find({ applicationId: { $in: appIds }, status: { $nin: ['CANCELLED'] } })
+      .select('_id applicationId scheduledDate slotStart slotEnd status assignedTo assignedToRole assignmentRationale')
+      .populate('assignedTo', 'name role designation')
+      .lean(),
+    RiskFlag.find({ applicationId: { $in: appIds }, status: { $in: ['OPEN', 'REVIEWING', 'CONFIRMED'] } })
+      .select('applicationId flagType level score title reasons recommendedAction status')
+      .lean(),
+  ]);
+
+  const byApp = <T extends { applicationId: Types.ObjectId }>(rows: T[]) => {
+    const map = new Map<string, T[]>();
+    for (const r of rows) {
+      const key = String(r.applicationId);
+      const list = map.get(key);
+      if (list) list.push(r);
+      else map.set(key, [r]);
+    }
+    return map;
+  };
+
+  const inspectionMap = byApp(inspections as { applicationId: Types.ObjectId }[]);
+  const scheduleMap = byApp(schedules as unknown as { applicationId: Types.ObjectId }[]);
+  const flagMap = byApp(flags as { applicationId: Types.ObjectId }[]);
+
+  const tasks = applications.map((a) => ({
+    ...a,
+    inspection: inspectionMap.get(String(a._id))?.[0] ?? null,
+    schedule: scheduleMap.get(String(a._id))?.[0] ?? null,
+    riskFlags: flagMap.get(String(a._id)) ?? [],
+    // Drives which buttons the UI renders, so the client never offers an action
+    // the server would refuse.
+    availableTransitions: availableTransitions(
+      a as unknown as Parameters<typeof availableTransitions>[0],
+      user
+    ),
+  }));
+
+  const counts = await Application.aggregate<{ _id: string; count: number }>([
+    { $match: { ...scope, status: { $in: OFFICER_QUEUE_STATUSES } } },
+    { $group: { _id: '$status', count: { $sum: 1 } } },
+  ]);
+
+  return ok({
+    tasks,
+    countsByStatus: Object.fromEntries(counts.map((c) => [c._id, c.count])),
+    scope: {
+      role: user.role,
+      state: user.state ?? null,
+      district: user.district ?? null,
+    },
+  });
+});

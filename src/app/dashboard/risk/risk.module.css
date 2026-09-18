@@ -1,0 +1,842 @@
+/* ═══════════════════════════════════════════
+   Risk & Anomalies — Claymorphism
+
+   Laid out as cards rather than a table, which is unusual for a register in this
+   app and deliberate here: the load-bearing content of a flag is its `reasons`
+   array — two or three sentences of prose — and prose does not fit in a table
+   cell. A table would have forced the reasons behind a "view" click, leaving the
+   officer to triage on the score alone. That is precisely the behaviour the spec
+   forbids.
+   ═══════════════════════════════════════════ */
+
+.page {
+  display: flex;
+  flex-direction: column;
+  gap: 22px;
+  animation: global(fadeInUp) 0.4s ease;
+}
+
+.loadingWrap {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 14px;
+  min-height: 420px;
+  color: var(--text-secondary);
+  font-size: 0.9rem;
+}
+
+.spin {
+  animation: global(claySpin) 0.8s linear infinite;
+}
+
+/* ── Header ── */
+.pageHeader h1 {
+  font-family: var(--font-heading);
+  font-size: 1.75rem;
+  font-weight: 800;
+  color: var(--text-primary);
+  margin-bottom: 6px;
+}
+
+.pageHeader p {
+  color: var(--text-secondary);
+  font-size: 0.9rem;
+  line-height: 1.65;
+  max-width: 84ch;
+}
+
+/* ── Access gate ──
+   Owners hit this. It is written to be useful to them rather than to read as a
+   wall: it explains why the queue is internal and points at the two things they
+   can actually do. */
+.gate {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  gap: 12px;
+  padding: 60px 32px;
+  background: var(--surface-card);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--clay-shadow-md);
+}
+
+.gate h2 {
+  font-family: var(--font-heading);
+  font-size: 1.3rem;
+  font-weight: 700;
+  color: var(--text-primary);
+}
+
+.gate p {
+  color: var(--text-secondary);
+  font-size: 0.9rem;
+  line-height: 1.65;
+  max-width: 58ch;
+}
+
+.gateActions {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+  justify-content: center;
+  margin-top: 8px;
+}
+
+/* ── Message boxes ── */
+.errorBox,
+.noticeBox {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 13px 16px;
+  border-radius: var(--radius-md);
+  font-size: 0.85rem;
+  line-height: 1.55;
+}
+
+.errorBox {
+  background: var(--status-error-bg);
+  color: #a33c3c;
+}
+
+.noticeBox {
+  background: var(--status-success-bg);
+  color: #3f7d42;
+}
+
+.errorBox svg,
+.noticeBox svg {
+  flex-shrink: 0;
+  margin-top: 1px;
+}
+
+.boxDismiss {
+  margin-left: auto;
+  border: none;
+  background: none;
+  cursor: pointer;
+  color: inherit;
+  opacity: 0.6;
+  display: flex;
+  padding: 0;
+  flex-shrink: 0;
+}
+
+.boxDismiss:hover {
+  opacity: 1;
+}
+
+/* ── Level tiles ──
+   Buttons, not decorations: each one filters the queue to that level. A count you
+   cannot act on is a count you read once and ignore. */
+.metricsGrid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  gap: 14px;
+}
+
+.metricCard {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  padding: 16px 18px;
+  text-align: left;
+  background: var(--surface-card);
+  border: 1px solid rgba(61, 64, 91, 0.06);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--clay-shadow-sm);
+  cursor: pointer;
+  transition: transform 0.2s, box-shadow 0.2s, border-color 0.2s;
+}
+
+.metricCard:hover {
+  transform: translateY(-2px);
+  box-shadow: var(--clay-shadow-md);
+}
+
+.metricActive {
+  border-color: var(--color-primary);
+  box-shadow: var(--clay-shadow-md);
+}
+
+.metricLabel {
+  font-size: 0.72rem;
+  font-weight: 600;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.4px;
+}
+
+.metricVal {
+  font-family: var(--font-heading);
+  font-size: 1.7rem;
+  font-weight: 800;
+  color: var(--text-primary);
+  line-height: 1.1;
+  font-variant-numeric: tabular-nums;
+}
+
+.metricSub {
+  font-size: 0.74rem;
+  color: var(--text-muted);
+}
+
+/* A left edge in the level's colour. Colour is the secondary cue — the tile is
+   still readable and still labelled without it. */
+.metricCRITICAL,
+.metricHIGH {
+  border-left: 3px solid var(--status-error);
+}
+
+.metricMEDIUM {
+  border-left: 3px solid var(--status-warning);
+}
+
+.metricLOW {
+  border-left: 3px solid var(--status-info);
+}
+
+/* ── Toolbar ── */
+.toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  flex-wrap: wrap;
+}
+
+.tabs {
+  display: flex;
+  gap: 6px;
+  padding: 4px;
+  background: var(--surface-warm);
+  border-radius: var(--radius-pill);
+}
+
+.tab {
+  padding: 8px 18px;
+  border: none;
+  background: none;
+  border-radius: var(--radius-pill);
+  font-family: var(--font-heading);
+  font-weight: 600;
+  font-size: 0.83rem;
+  color: var(--text-secondary);
+  cursor: pointer;
+  transition: background 0.2s, color 0.2s;
+}
+
+.tab:hover {
+  color: var(--text-primary);
+}
+
+.tabActive {
+  background: var(--surface-card);
+  color: var(--color-primary);
+  box-shadow: var(--clay-shadow-sm);
+}
+
+.toolbar select {
+  min-width: 250px;
+  font-size: 0.85rem;
+}
+
+/* What the selected detector actually looks for. Shown because "GPS mismatch" is
+   not self-explanatory and an officer should not have to guess the threshold. */
+.typeNote {
+  display: flex;
+  align-items: flex-start;
+  gap: 9px;
+  padding: 12px 16px;
+  background: var(--status-info-bg);
+  border-radius: var(--radius-md);
+  font-size: 0.83rem;
+  line-height: 1.6;
+  color: #2b5d7d;
+}
+
+.typeNote svg {
+  flex-shrink: 0;
+  margin-top: 2px;
+}
+
+/* ── Flag cards ── */
+.flagList {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.flagCard {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 20px 22px;
+  background: var(--surface-card);
+  border: 1px solid rgba(61, 64, 91, 0.06);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--clay-shadow-sm);
+}
+
+.flagCard h3 {
+  font-family: var(--font-heading);
+  font-size: 1.02rem;
+  font-weight: 700;
+  color: var(--text-primary);
+  line-height: 1.4;
+}
+
+.flagTop {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 14px;
+}
+
+.flagHead {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.flagType {
+  font-family: var(--font-heading);
+  font-size: 0.78rem;
+  font-weight: 600;
+  color: var(--text-secondary);
+}
+
+/* Small, grey, and monospaced-by-numerals. The score orders the queue; it is not
+   the finding, and it is styled to lose any argument with the reasons below it. */
+.score {
+  font-family: var(--font-heading);
+  font-size: 0.8rem;
+  font-weight: 700;
+  color: var(--text-muted);
+  font-variant-numeric: tabular-nums;
+  flex-shrink: 0;
+  cursor: help;
+}
+
+.reasons {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  padding-left: 18px;
+  margin: 0;
+}
+
+.reasons li {
+  font-size: 0.86rem;
+  line-height: 1.6;
+  color: var(--text-primary);
+}
+
+.reasons li::marker {
+  color: var(--color-primary);
+}
+
+.flagMeta {
+  display: flex;
+  gap: 16px;
+  flex-wrap: wrap;
+}
+
+.metaItem {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 0.78rem;
+  color: var(--text-secondary);
+}
+
+.metaItem svg {
+  color: var(--text-muted);
+  flex-shrink: 0;
+}
+
+.recommended {
+  padding: 11px 15px;
+  background: var(--surface-warm);
+  border-radius: var(--radius-md);
+  font-size: 0.83rem;
+  line-height: 1.6;
+  color: var(--text-secondary);
+}
+
+.recommended strong {
+  color: var(--text-primary);
+}
+
+.resolvedNote {
+  padding: 11px 15px;
+  background: var(--surface-elevated);
+  border-left: 3px solid var(--text-muted);
+  border-radius: var(--radius-sm);
+  font-size: 0.83rem;
+  line-height: 1.6;
+  color: var(--text-secondary);
+}
+
+.flagActions {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  flex-wrap: wrap;
+  padding-top: 4px;
+}
+
+.plainLink {
+  font-size: 0.82rem;
+  font-weight: 600;
+  color: var(--color-primary);
+  text-decoration: none;
+}
+
+.plainLink:hover {
+  text-decoration: underline;
+}
+
+/* ── Empty state ── */
+.emptyState {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  gap: 10px;
+  padding: 56px 32px;
+  background: var(--surface-card);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--clay-shadow-sm);
+}
+
+.emptyState h3 {
+  font-family: var(--font-heading);
+  font-size: 1.1rem;
+  font-weight: 700;
+  color: var(--text-primary);
+}
+
+.emptyState p {
+  color: var(--text-secondary);
+  font-size: 0.87rem;
+  line-height: 1.6;
+  max-width: 52ch;
+}
+
+/* ── Pager ── */
+.pager {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 16px;
+}
+
+.pagerInfo {
+  font-size: 0.82rem;
+  color: var(--text-secondary);
+}
+
+.footNote {
+  font-size: 0.8rem;
+  color: var(--text-muted);
+  line-height: 1.65;
+  max-width: 92ch;
+}
+
+/* ── Drawer ── */
+.drawer {
+  max-width: 840px;
+  width: 100%;
+  max-height: 90vh;
+  overflow-y: auto;
+}
+
+.drawerLoading {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+  padding: 60px 20px;
+  color: var(--text-secondary);
+  font-size: 0.88rem;
+}
+
+.modalHeader {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 14px;
+}
+
+.modalHeader h3 {
+  font-family: var(--font-heading);
+  font-size: 1.15rem;
+  font-weight: 700;
+  color: var(--text-primary);
+  margin: 8px 0 3px;
+  line-height: 1.4;
+}
+
+.modalHeader p {
+  font-size: 0.8rem;
+  color: var(--text-secondary);
+}
+
+.iconBtn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  border: none;
+  background: none;
+  border-radius: var(--radius-sm);
+  color: var(--text-secondary);
+  cursor: pointer;
+  transition: background 0.2s, color 0.2s;
+  flex-shrink: 0;
+}
+
+.iconBtn:hover {
+  background: var(--surface-warm);
+  color: var(--color-primary);
+}
+
+.detectorNote {
+  padding: 12px 16px;
+  background: var(--status-info-bg);
+  border-radius: var(--radius-md);
+  font-size: 0.83rem;
+  line-height: 1.6;
+  color: #2b5d7d;
+}
+
+.sectionTitle {
+  font-family: var(--font-heading);
+  font-size: 0.76rem;
+  font-weight: 700;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.7px;
+  margin: 24px 0 10px;
+  padding-bottom: 8px;
+  border-bottom: 1px solid rgba(61, 64, 91, 0.07);
+}
+
+.notSet {
+  font-size: 0.84rem;
+  color: var(--text-muted);
+  font-style: italic;
+  line-height: 1.6;
+}
+
+/* ── Evidence ── */
+.evidenceList {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+  gap: 8px 20px;
+  margin: 0;
+}
+
+.evidenceRow {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 9px 12px;
+  background: var(--surface-warm);
+  border-radius: var(--radius-sm);
+  min-width: 0;
+}
+
+.evidenceRow dt {
+  font-size: 0.71rem;
+  font-weight: 600;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.4px;
+}
+
+.evidenceRow dd {
+  margin: 0;
+  font-size: 0.85rem;
+  color: var(--text-primary);
+  word-break: break-word;
+  font-variant-numeric: tabular-nums;
+}
+
+/* Nested objects the detector recorded verbatim. Kept readable rather than
+   pretty — an officer checking a claim needs the raw figure. */
+.evidenceCode {
+  font-family: ui-monospace, 'SFMono-Regular', Menlo, monospace;
+  font-size: 0.76rem;
+  color: var(--text-secondary);
+  word-break: break-all;
+}
+
+/* ── Subject records ── */
+.subjectGrid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 12px;
+}
+
+.subjectCard {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 5px;
+  padding: 14px 16px;
+  background: var(--surface-elevated);
+  border: 1px solid rgba(61, 64, 91, 0.06);
+  border-radius: var(--radius-md);
+  text-decoration: none;
+  transition: border-color 0.2s, transform 0.2s;
+  min-width: 0;
+}
+
+a.subjectCard:hover {
+  border-color: var(--color-primary);
+  transform: translateY(-1px);
+}
+
+.subjectHead {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 0.7rem;
+  font-weight: 700;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.subjectCard strong {
+  font-family: var(--font-heading);
+  font-size: 0.95rem;
+  font-weight: 700;
+  color: var(--text-primary);
+  word-break: break-word;
+}
+
+.subjectSub {
+  font-size: 0.76rem;
+  color: var(--text-secondary);
+  line-height: 1.45;
+}
+
+/* ── Related flags ── */
+.relatedList {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.relatedList li {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 14px;
+  background: var(--surface-warm);
+  border-radius: var(--radius-sm);
+  flex-wrap: wrap;
+}
+
+.relatedTitle {
+  font-size: 0.85rem;
+  color: var(--text-primary);
+  flex: 1;
+  min-width: 160px;
+}
+
+.relatedMeta {
+  font-size: 0.75rem;
+  color: var(--text-muted);
+}
+
+.reviewBox {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 14px 16px;
+  background: var(--surface-elevated);
+  border-left: 3px solid var(--color-secondary);
+  border-radius: var(--radius-sm);
+}
+
+.reviewBox p {
+  font-size: 0.85rem;
+  line-height: 1.6;
+  color: var(--text-secondary);
+}
+
+.reviewBox strong {
+  color: var(--text-primary);
+}
+
+/* ── Enforcement hand-off ──
+   Shown only after a confirmation, and only because the API returned
+   `nextStep: 'enforcement'`. It is an offer, not a consequence: the copy says what
+   confirming did and did not do, so nobody reads the finding as a penalty. */
+.handoff {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 12px 14px;
+  align-items: start;
+  margin-top: 22px;
+  padding: 18px 20px;
+  background: var(--status-warning-bg);
+  border-radius: var(--radius-md);
+}
+
+.handoff svg {
+  color: #8a6420;
+  margin-top: 2px;
+}
+
+.handoff strong {
+  display: block;
+  font-family: var(--font-heading);
+  font-size: 0.95rem;
+  color: #7a5718;
+  margin-bottom: 4px;
+}
+
+.handoff p {
+  font-size: 0.84rem;
+  line-height: 1.6;
+  color: #8a6420;
+}
+
+.handoffActions {
+  grid-column: 2;
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+/* ── Resolution picker ──
+   Three explicit choices with their consequences written on them, rather than a
+   status dropdown. "DISMISSED" in a select box does not tell an officer that the
+   decision is permanent and goes in the audit trail. */
+.resolutionRow {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(230px, 1fr));
+  gap: 10px;
+}
+
+.resolutionBtn {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 14px 16px;
+  text-align: left;
+  background: var(--surface-card);
+  border: 1.5px solid rgba(61, 64, 91, 0.1);
+  border-radius: var(--radius-md);
+  cursor: pointer;
+  transition: border-color 0.2s, background 0.2s;
+}
+
+.resolutionBtn:hover {
+  border-color: var(--color-primary);
+}
+
+.resolutionBtn svg {
+  flex-shrink: 0;
+  margin-top: 2px;
+  color: var(--text-secondary);
+}
+
+.resolutionBtn span {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  min-width: 0;
+}
+
+.resolutionBtn strong {
+  font-family: var(--font-heading);
+  font-size: 0.88rem;
+  font-weight: 700;
+  color: var(--text-primary);
+}
+
+.resolutionBtn em {
+  font-size: 0.76rem;
+  font-style: normal;
+  line-height: 1.5;
+  color: var(--text-secondary);
+}
+
+.resolutionActive {
+  border-color: var(--color-primary);
+  background: rgba(224, 122, 95, 0.05);
+}
+
+.resolutionActive svg {
+  color: var(--color-primary);
+}
+
+.noteField {
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+  margin-top: 16px;
+}
+
+.noteField textarea {
+  resize: vertical;
+  min-height: 84px;
+  font-family: var(--font-body);
+}
+
+.hint {
+  font-size: 0.76rem;
+  color: var(--text-muted);
+  line-height: 1.55;
+}
+
+.modalActions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+  margin-top: 10px;
+}
+
+/* ── Responsive ── */
+@media (max-width: 768px) {
+  .toolbar select {
+    min-width: 0;
+    width: 100%;
+  }
+
+  .tabs {
+    width: 100%;
+  }
+
+  .tab {
+    flex: 1;
+    padding: 8px 10px;
+  }
+
+  .handoff {
+    grid-template-columns: 1fr;
+  }
+
+  .handoffActions {
+    grid-column: 1;
+  }
+
+  .modalActions {
+    flex-direction: column-reverse;
+  }
+}

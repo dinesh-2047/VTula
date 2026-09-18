@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import Link from 'next/link';
 import { useSession, signOut } from 'next-auth/react';
 import {
@@ -36,6 +36,17 @@ interface StatItem {
   suffix: string;
 }
 
+/** Shape of `GET /api/public/stats`. */
+interface PublicStats {
+  instruments: number;
+  verifiedInstruments: number;
+  certificates: number;
+  activeCertificates: number;
+  statesCovered: number;
+  publicVerifications: number;
+  officers: number;
+}
+
 const FEATURES = [
   {
     icon: FileCheck,
@@ -64,7 +75,7 @@ const FEATURES = [
   {
     icon: MapPin,
     title: 'Geo-Tagged Inspections',
-    desc: 'Mobile-first inspection forms with GPS-tagged photos, tamper-proof evidence, and offline support.',
+    desc: 'Mobile-first inspection forms with GPS-tagged photos and tamper-proof evidence hashed on upload.',
     color: '#7BAFD4',
   },
   {
@@ -158,48 +169,54 @@ function AnimatedCounter({ value, suffix }: { value: number; suffix: string }) {
 
 export default function LandingPage() {
   const { data: session, status } = useSession();
-  const [isVisible, setIsVisible] = useState(false);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
-  const [stats, setStats] = useState<StatItem[]>([
-    { label: 'Instruments Registered', value: 124, suffix: '+' },
-    { label: 'States & UTs Covered', value: 28, suffix: '' },
-    { label: 'Certificates Issued', value: 98, suffix: '+' },
-    { label: 'LMO Officers Active', value: 34, suffix: '+' },
-  ]);
 
-  useEffect(() => {
-    setIsVisible(true);
-    fetchLiveStats();
+  /*
+   * Starts empty rather than seeded. The previous version initialised these to
+   * 124 instruments / 28 states / 98 certificates / 34 officers and then tried to
+   * replace two of them by calling `/api/instruments` and `/api/certificates` —
+   * endpoints that require a session, so an unauthenticated visitor got 401 and
+   * kept the invented figures. And where the call did succeed it read `.length`
+   * of one paginated page and printed it as a national total.
+   *
+   * `/api/public/stats` counts the collections server-side and needs no session.
+   * If it cannot be reached the section is not rendered at all: a blank space is
+   * honest, a made-up number is not.
+   */
+  const [stats, setStats] = useState<StatItem[] | null>(null);
+
+  const fetchStats = useCallback(async () => {
+    try {
+      const res = await fetch('/api/public/stats');
+      const data = (await res.json()) as { success: boolean; stats?: PublicStats };
+      if (!data.success || !data.stats) return;
+
+      const s = data.stats;
+      setStats([
+        { label: 'Instruments on the register', value: s.instruments, suffix: '' },
+        { label: 'Certificates issued', value: s.certificates, suffix: '' },
+        { label: 'States & UTs covered', value: s.statesCovered, suffix: '' },
+        { label: 'Public QR verifications', value: s.publicVerifications, suffix: '' },
+      ]);
+    } catch {
+      // Left null — the stats band simply does not render.
+    }
   }, []);
 
-  const fetchLiveStats = async () => {
-    try {
-      const [instRes, certRes] = await Promise.all([
-        fetch('/api/instruments'),
-        fetch('/api/certificates'),
-      ]);
-      const instData = await instRes.json();
-      const certData = await certRes.json();
-
-      const instCount = instData.instruments?.length || 0;
-      const certCount = certData.certificates?.length || 0;
-
-      if (instCount > 0 || certCount > 0) {
-        setStats([
-          { label: 'Instruments Registered', value: Math.max(instCount, 1), suffix: '' },
-          { label: 'States Jurisdiction', value: 28, suffix: '' },
-          { label: 'Certificates Issued', value: Math.max(certCount, 1), suffix: '' },
-          { label: 'Officers Active', value: 12, suffix: '+' },
-        ]);
-      }
-    } catch {
-      // Fallback
-    }
-  };
+  useEffect(() => {
+    let cancelled = false;
+    void (async () => {
+      await Promise.resolve();
+      if (cancelled) return;
+      await fetchStats();
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [fetchStats]);
 
   const isLoggedIn = status === 'authenticated' && !!session?.user;
-  const userName = session?.user?.name || 'User';
-  const userRole = (session?.user as any)?.role || 'Owner';
+  const userRole = session?.user?.role ?? 'Owner';
 
   return (
     <div className={styles.landing}>
@@ -304,7 +321,7 @@ export default function LandingPage() {
       </nav>
 
       {/* ── Hero ── */}
-      <section className={`${styles.hero} ${isVisible ? styles.heroVisible : ''}`}>
+      <section className={styles.hero}>
         <div className={styles.heroBackground}>
           <div className={styles.heroOrb1} />
           <div className={styles.heroOrb2} />
@@ -347,6 +364,18 @@ export default function LandingPage() {
             </Link>
           </div>
 
+          {/*
+            * A sentence rather than a third button. The two buttons above are for
+            * people who came here on purpose; this is for the person who arrived
+            * angry after being short-weighed and needs to be told, in plain words,
+            * that there is somewhere to say so and it costs them nothing.
+            */}
+          <p className={styles.heroComplain}>
+            Given less than you paid for, or the machine has no sticker?{' '}
+            <Link href="/complaint">File a complaint</Link> — no account needed, and the shop is
+            never told who reported it.
+          </p>
+
           <div className={styles.heroTrust}>
             <div className={styles.heroTrustItem}>
               <CheckCircle size={16} />
@@ -371,7 +400,9 @@ export default function LandingPage() {
               <div className={styles.heroCardDot} style={{ background: 'var(--status-success)' }} />
             </div>
             <div className={styles.heroCardBody}>
-              <div className={styles.heroCardTitle}>Certificate CERT-2026-A7X9K2</div>
+              {/* An illustration of what a verified certificate looks like, not a
+                  record — labelled so nobody tries to verify this number. */}
+              <div className={styles.heroCardTitle}>Example certificate</div>
               <div className={styles.heroCardRow}>
                 <span>Status</span>
                 <span className={styles.heroCardActive}>● Active</span>
@@ -397,18 +428,20 @@ export default function LandingPage() {
       </section>
 
       {/* ── Stats ── */}
-      <section className={styles.stats}>
-        <div className={styles.statsGrid}>
-          {stats.map((stat) => (
-            <div key={stat.label} className={styles.statCard}>
-              <div className={styles.statValue}>
-                <AnimatedCounter value={stat.value} suffix={stat.suffix} />
+      {stats && (
+        <section className={styles.stats}>
+          <div className={styles.statsGrid}>
+            {stats.map((stat) => (
+              <div key={stat.label} className={styles.statCard}>
+                <div className={styles.statValue}>
+                  <AnimatedCounter value={stat.value} suffix={stat.suffix} />
+                </div>
+                <div className={styles.statLabel}>{stat.label}</div>
               </div>
-              <div className={styles.statLabel}>{stat.label}</div>
-            </div>
-          ))}
-        </div>
-      </section>
+            ))}
+          </div>
+        </section>
+      )}
 
       {/* ── Features ── */}
       <section id="features" className={styles.features}>
@@ -547,6 +580,8 @@ export default function LandingPage() {
             </Link>
             <Link href="/register">Register</Link>
             <Link href="/verify">Verify Certificate</Link>
+            <Link href="/complaint">File a Complaint</Link>
+            <Link href="/complaint/track">Track a Complaint</Link>
           </div>
           <div className={styles.footerLinks}>
             <h5>Resources</h5>

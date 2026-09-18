@@ -1,0 +1,552 @@
+/* ═══════════════════════════════════════════
+   An enforcement case, read by the business it is against — Claymorphism
+
+   Deliberately not the officer's console. That page is a workbench: a wide grid,
+   a console column, forms everywhere. This one is a document, so it is a single
+   narrow column at reading measure, and the only input on it is the response box.
+
+   The palette is the one difference worth naming. The officer's page uses severity
+   colour freely because severity is how a queue is triaged. Here it is dropped
+   almost entirely: telling a business its own case is "HIGH" in red across the top
+   of the page is intimidation rather than information, and the status badge already
+   says exactly where the case stands. Colour is spent on the one line that answers
+   "do I have to do something" and on the penalty, and nowhere else.
+   ═══════════════════════════════════════════ */
+
+.page {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+  max-width: 760px;
+  animation: global(fadeInUp) 0.4s ease;
+}
+
+.backLink {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-family: var(--font-heading);
+  font-size: 0.84rem;
+  font-weight: 600;
+  color: var(--text-secondary);
+  text-decoration: none;
+  width: fit-content;
+}
+
+.backLink:hover {
+  color: var(--color-primary);
+}
+
+/* ── Header ── */
+.header {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.headerTop {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.caseNo {
+  font-family: var(--font-heading);
+  font-size: 0.86rem;
+  font-weight: 700;
+  letter-spacing: 0.03em;
+  color: var(--color-primary);
+}
+
+.header h1 {
+  font-family: var(--font-heading);
+  font-size: 1.55rem;
+  font-weight: 800;
+  line-height: 1.3;
+  color: var(--text-primary);
+}
+
+.headerType {
+  font-size: 0.85rem;
+  color: var(--text-secondary);
+}
+
+/* ── The one line that answers "must I do something" ──
+   Given the weight of a verdict because that is what it is to the reader. */
+.verdict {
+  display: flex;
+  align-items: flex-start;
+  gap: 13px;
+  padding: 17px 20px;
+  border-radius: var(--radius-lg);
+  box-shadow: var(--clay-shadow-sm);
+}
+
+.verdict > svg {
+  flex-shrink: 0;
+  margin-top: 1px;
+}
+
+.verdict > div {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+}
+
+.verdict strong {
+  font-family: var(--font-heading);
+  font-size: 1rem;
+  font-weight: 800;
+}
+
+.verdict span {
+  font-size: 0.87rem;
+  line-height: 1.65;
+}
+
+.verdictOpen {
+  background: var(--status-warning-bg);
+  border: 1.5px solid rgba(245, 200, 105, 0.55);
+  color: #7a5718;
+}
+
+.verdictOpen > svg {
+  color: #8a6420;
+}
+
+.verdictOk {
+  background: var(--status-success-bg);
+  border: 1.5px solid rgba(123, 198, 126, 0.5);
+  color: #2c6b2f;
+}
+
+.verdictOk > svg {
+  color: var(--status-success);
+}
+
+.verdictNeutral {
+  background: var(--surface-elevated);
+  border: 1.5px solid rgba(61, 64, 91, 0.12);
+  color: var(--text-secondary);
+}
+
+.verdictNeutral > svg {
+  color: var(--text-muted);
+}
+
+.verdictNeutral strong,
+.verdictOk strong,
+.verdictOpen strong {
+  color: inherit;
+}
+
+/* ── Progress rail ──
+   Only the stages reached are drawn. Showing "Penalty" greyed out ahead of a case
+   that may never get there would read as a schedule rather than a history. */
+.rail {
+  display: flex;
+  align-items: center;
+  gap: 0;
+  flex-wrap: wrap;
+  list-style: none;
+  padding: 14px 18px;
+  background: var(--surface-card);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--clay-shadow-sm);
+}
+
+.rail li {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 0.8rem;
+  color: var(--text-muted);
+}
+
+.rail li:not(:last-child)::after {
+  content: '';
+  width: 26px;
+  height: 2px;
+  margin: 0 12px;
+  background: rgba(61, 64, 91, 0.14);
+  border-radius: 2px;
+}
+
+.railDot {
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  background: rgba(61, 64, 91, 0.2);
+  flex-shrink: 0;
+}
+
+.railDone .railDot {
+  background: var(--color-secondary);
+}
+
+.railNow {
+  font-family: var(--font-heading);
+  font-weight: 700;
+  color: var(--text-primary);
+}
+
+.railNow .railDot {
+  background: var(--color-primary);
+  box-shadow: 0 0 0 4px rgba(224, 122, 95, 0.16);
+}
+
+/* ── Cards ── */
+.card {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 22px 24px;
+  background: var(--surface-card);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--clay-shadow-sm);
+}
+
+.card h2 {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-family: var(--font-heading);
+  font-size: 0.78rem;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--text-muted);
+}
+
+.card h2 svg {
+  color: var(--color-primary);
+  flex-shrink: 0;
+}
+
+/* The allegation, at reading size and preserving the officer's line breaks —
+   a case opened from a risk finding carries a bulleted list in this field. */
+.description {
+  font-size: 0.92rem;
+  line-height: 1.75;
+  color: var(--text-primary);
+  white-space: pre-wrap;
+}
+
+/* What is not on the page, and why. Set as a note rather than a warning: it is
+   not a problem, it is the rule the record is kept under. */
+.withheld {
+  padding: 12px 14px;
+  background: var(--surface-elevated);
+  border-left: 3px solid var(--color-accent);
+  border-radius: var(--radius-sm);
+  font-size: 0.82rem;
+  line-height: 1.65;
+  color: var(--text-secondary);
+}
+
+/* ── Instrument details ── */
+.detailList {
+  display: flex;
+  flex-direction: column;
+  margin: 0;
+}
+
+.detailRow {
+  display: flex;
+  align-items: baseline;
+  gap: 14px;
+  padding: 10px 0;
+  border-bottom: 1px dashed rgba(61, 64, 91, 0.08);
+  font-size: 0.88rem;
+}
+
+.detailRow:last-child {
+  border-bottom: none;
+}
+
+.detailRow dt {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 160px;
+  flex-shrink: 0;
+  font-size: 0.83rem;
+  color: var(--text-muted);
+}
+
+.detailRow dt svg {
+  flex-shrink: 0;
+}
+
+.detailRow dd {
+  margin: 0;
+  font-weight: 600;
+  color: var(--text-primary);
+  overflow-wrap: anywhere;
+}
+
+.detailRow code {
+  font-size: 0.85rem;
+  background: var(--surface-warm);
+  padding: 2px 7px;
+  border-radius: 5px;
+  letter-spacing: 0.03em;
+}
+
+.certLink {
+  color: var(--color-primary-dark);
+  font-weight: 600;
+  text-decoration: underline;
+  text-decoration-thickness: 1px;
+  text-underline-offset: 2px;
+}
+
+.certLink:hover {
+  color: var(--color-primary);
+}
+
+/* ── Penalty ──
+   The one place the error palette is used, because a sum of money owed is the one
+   thing on this page that has a deadline attached to it. */
+.penaltyCard {
+  border-left: 4px solid var(--status-error);
+}
+
+.penaltyCard h2 svg {
+  color: var(--status-error);
+}
+
+.penaltyAmount {
+  font-family: var(--font-heading);
+  font-size: 1.9rem;
+  font-weight: 800;
+  line-height: 1.1;
+  color: #a33c3c;
+  font-variant-numeric: tabular-nums;
+}
+
+.penaltyMeta {
+  font-size: 0.85rem;
+  line-height: 1.65;
+  color: var(--text-secondary);
+}
+
+/* ── Timeline ── */
+.timeline {
+  display: flex;
+  flex-direction: column;
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.timeline li {
+  display: flex;
+  gap: 14px;
+  padding-bottom: 16px;
+  position: relative;
+}
+
+.timeline li:not(:last-child)::before {
+  content: '';
+  position: absolute;
+  left: 5px;
+  top: 15px;
+  bottom: 0;
+  width: 2px;
+  background: rgba(61, 64, 91, 0.12);
+}
+
+.timeline li:last-child {
+  padding-bottom: 0;
+}
+
+.timeline li > div {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  min-width: 0;
+}
+
+.timelineDot {
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  background: var(--color-secondary);
+  flex-shrink: 0;
+  margin-top: 4px;
+  z-index: 1;
+}
+
+/* The business's own entries, marked so the exchange reads as an exchange. */
+.timelineMine .timelineDot {
+  background: var(--color-primary);
+}
+
+.timeline strong {
+  font-family: var(--font-heading);
+  font-size: 0.86rem;
+  font-weight: 700;
+  color: var(--text-primary);
+}
+
+.timeline time {
+  font-size: 0.76rem;
+  color: var(--text-muted);
+}
+
+.timelineNote {
+  margin-top: 5px;
+  padding: 10px 13px;
+  background: var(--surface-warm);
+  border-radius: var(--radius-sm);
+  font-size: 0.85rem;
+  line-height: 1.65;
+  color: var(--text-secondary);
+  white-space: pre-wrap;
+}
+
+.evidenceNote {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  padding-top: 4px;
+  font-size: 0.81rem;
+  line-height: 1.6;
+  color: var(--text-muted);
+}
+
+.evidenceNote svg {
+  flex-shrink: 0;
+  margin-top: 3px;
+}
+
+/* ── Right of reply ── */
+.respondCard {
+  border-left: 4px solid var(--color-primary);
+}
+
+.respondIntro {
+  font-size: 0.85rem;
+  line-height: 1.7;
+  color: var(--text-secondary);
+}
+
+.respondCard textarea {
+  resize: vertical;
+  min-height: 110px;
+  font-size: 0.9rem;
+  line-height: 1.6;
+}
+
+.respondFoot {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  flex-wrap: wrap;
+}
+
+.counter {
+  font-size: 0.78rem;
+  color: var(--text-muted);
+  font-variant-numeric: tabular-nums;
+}
+
+.respondUsed {
+  font-size: 0.78rem;
+  color: var(--text-muted);
+}
+
+.sentBox,
+.blocked,
+.errorBox {
+  display: flex;
+  align-items: flex-start;
+  gap: 9px;
+  padding: 12px 14px;
+  border-radius: var(--radius-md);
+  font-size: 0.85rem;
+  line-height: 1.65;
+}
+
+.sentBox svg,
+.blocked svg,
+.errorBox svg {
+  flex-shrink: 0;
+  margin-top: 2px;
+}
+
+.sentBox {
+  background: var(--status-success-bg);
+  color: #2c6b2f;
+}
+
+.blocked {
+  background: var(--surface-elevated);
+  color: var(--text-secondary);
+}
+
+.errorBox {
+  background: var(--status-error-bg);
+  color: #a33c3c;
+}
+
+/* ── Contact ── */
+.contactLine {
+  font-size: 0.9rem;
+  line-height: 1.7;
+  color: var(--text-primary);
+}
+
+.contactNote {
+  font-size: 0.83rem;
+  line-height: 1.7;
+  color: var(--text-secondary);
+}
+
+.footNote {
+  font-size: 0.79rem;
+  line-height: 1.7;
+  color: var(--text-muted);
+}
+
+.spin {
+  animation: global(claySpin) 0.8s linear infinite;
+}
+
+/* ── Responsive ── */
+@media (max-width: 768px) {
+  .card {
+    padding: 18px 16px;
+  }
+
+  .header h1 {
+    font-size: 1.32rem;
+  }
+
+  .detailRow {
+    flex-direction: column;
+    gap: 3px;
+  }
+
+  .detailRow dt {
+    min-width: 0;
+  }
+
+  .rail li:not(:last-child)::after {
+    width: 14px;
+    margin: 0 7px;
+  }
+
+  .respondFoot {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .respondFoot button {
+    justify-content: center;
+  }
+}

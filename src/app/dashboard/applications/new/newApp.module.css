@@ -1,5 +1,5 @@
 .page {
-  animation: fadeInUp 0.4s ease;
+  animation: global(fadeInUp) 0.4s ease;
 }
 
 .loadingWrap {
@@ -13,7 +13,7 @@
 }
 
 .spin {
-  animation: claySpin 0.8s linear infinite;
+  animation: global(claySpin) 0.8s linear infinite;
 }
 
 .backLink {
@@ -164,7 +164,26 @@
   gap: 16px;
 }
 
+/* Filed, fee outstanding: both ways forward, neither of them "file again". */
+.filedActions {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  flex-wrap: wrap;
+  margin-top: 4px;
+}
+
+.filedNote {
+  max-width: 480px;
+  font-size: 0.85rem;
+  line-height: 1.6;
+  color: var(--text-secondary);
+}
+
 @media (max-width: 640px) {
   .formGrid { grid-template-columns: 1fr; }
   .formGrid > div[style*="span 2"] { grid-column: auto !important; }
+  .successCard { padding: 40px 20px; }
+  .filedActions { flex-direction: column; align-items: stretch; width: 100%; }
 }

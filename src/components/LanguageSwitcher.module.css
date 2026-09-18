@@ -1,0 +1,114 @@
+/*
+ * The language menu, used in the dashboard topbar and on the public trust centre.
+ *
+ * `animation: global(name)` is required — CSS Modules rewrites the identifier in an
+ * `animation` declaration into this file's scope, so a keyframe defined in
+ * `globals.css` would otherwise resolve to nothing and silently not animate.
+ */
+
+.wrap {
+  position: relative;
+  flex-shrink: 0;
+}
+
+.trigger {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  padding: 8px 12px;
+  background: var(--surface-card);
+  border: 1px solid rgba(61, 64, 91, 0.08);
+  border-radius: var(--radius-pill);
+  box-shadow: var(--clay-shadow-sm);
+  color: var(--text-secondary);
+  font-family: var(--font-heading);
+  font-size: 0.82rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.trigger:hover {
+  color: var(--color-primary);
+  box-shadow: var(--clay-shadow-md);
+  transform: translateY(-1px);
+}
+
+.trigger svg {
+  flex-shrink: 0;
+}
+
+/*
+ * The label is the first thing dropped on a narrow screen: the globe alone is
+ * understood, and the topbar has a search box that needs the room more.
+ */
+@media (max-width: 720px) {
+  .triggerLabel {
+    display: none;
+  }
+  .trigger {
+    padding: 8px;
+  }
+}
+
+.menu {
+  position: absolute;
+  top: calc(100% + 8px);
+  right: 0;
+  min-width: 178px;
+  background: var(--surface-card);
+  border-radius: var(--radius-md);
+  box-shadow: var(--clay-shadow-lg);
+  border: 1px solid rgba(255, 255, 255, 0.8);
+  padding: 7px;
+  z-index: 60;
+  animation: global(fadeInUp) 0.18s ease;
+}
+
+.menuLeft {
+  right: auto;
+  left: 0;
+}
+
+.menuHead {
+  font-size: 0.68rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+  padding: 6px 10px 8px;
+}
+
+.option {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  width: 100%;
+  padding: 9px 11px;
+  background: transparent;
+  border: none;
+  border-radius: var(--radius-sm);
+  color: var(--text-primary);
+  font-family: var(--font-body);
+  font-size: 0.88rem;
+  font-weight: 500;
+  text-align: left;
+  cursor: pointer;
+  transition: background 0.15s ease;
+}
+
+.option:hover {
+  background: var(--surface-warm);
+}
+
+.optionOn {
+  background: var(--surface-warm);
+  color: var(--color-primary-dark);
+  font-weight: 700;
+}
+
+.option svg {
+  flex-shrink: 0;
+  color: var(--color-secondary);
+}

@@ -1,0 +1,847 @@
+/*
+ * The instrument digital passport (spec §9).
+ *
+ * Two columns on a wide screen: the record itself on the left, the standing and
+ * governing rule on the right, with the full history running the width of the
+ * page underneath. On a phone it collapses to one column in the same order,
+ * because an inspector reading this on site needs the verdict before the detail.
+ *
+ * `animation: global(name)` is deliberate — CSS Modules scopes the identifier in
+ * an `animation` declaration into this file, so naming a keyframe that lives in
+ * `globals.css` would resolve to nothing and silently not animate.
+ */
+
+.page {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+  animation: global(fadeInUp) 0.35s ease;
+}
+
+/* ── Loading and failure ── */
+
+.loadingWrap,
+.errorWrap {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 14px;
+  min-height: 60vh;
+  text-align: center;
+  color: var(--text-secondary);
+}
+
+.errorWrap svg {
+  color: var(--status-error);
+}
+
+.errorWrap h2 {
+  font-family: var(--font-heading);
+  font-size: 1.25rem;
+  font-weight: 800;
+  color: var(--text-primary);
+  margin: 0;
+}
+
+.errorWrap p {
+  max-width: 420px;
+  font-size: 0.92rem;
+  line-height: 1.6;
+  margin: 0 0 6px;
+}
+
+.spin {
+  animation: global(claySpin) 0.8s linear infinite;
+}
+
+/* ── Header ── */
+
+.backLink {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  align-self: flex-start;
+  font-family: var(--font-heading);
+  font-weight: 500;
+  font-size: 0.85rem;
+  color: var(--text-secondary);
+  text-decoration: none;
+}
+
+.backLink:hover {
+  color: var(--color-primary);
+}
+
+.header {
+  display: flex;
+  align-items: flex-start;
+  gap: 16px;
+  flex-wrap: wrap;
+}
+
+.headerIcon {
+  width: 58px;
+  height: 58px;
+  flex-shrink: 0;
+  border-radius: var(--radius-lg);
+  background: linear-gradient(135deg, var(--color-secondary), var(--color-secondary-dark));
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: white;
+  box-shadow: var(--clay-shadow-md);
+}
+
+.headerText {
+  flex: 1;
+  min-width: 220px;
+}
+
+.headerTitleRow {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.headerTitleRow h1 {
+  font-size: 1.55rem;
+  font-weight: 800;
+  line-height: 1.2;
+  margin: 0;
+}
+
+.headerMeta {
+  color: var(--text-secondary);
+  font-size: 0.9rem;
+  margin: 6px 0 0;
+}
+
+.mono {
+  font-family: var(--font-heading);
+  font-weight: 700;
+  letter-spacing: 0.03em;
+}
+
+.actions {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+/* ── The headline verdict ── */
+
+.standing {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  padding: 18px 22px;
+  border-radius: var(--radius-xl);
+  border: 2px solid transparent;
+  box-shadow: var(--clay-shadow-sm);
+  background: var(--surface-card);
+}
+
+.toneOk {
+  border-color: rgba(123, 198, 126, 0.42);
+  background: linear-gradient(135deg, rgba(129, 178, 154, 0.12), var(--surface-card) 65%);
+}
+
+.toneWarn {
+  border-color: rgba(245, 200, 105, 0.5);
+  background: linear-gradient(135deg, rgba(244, 162, 97, 0.13), var(--surface-card) 65%);
+}
+
+.toneBad {
+  border-color: rgba(229, 115, 115, 0.45);
+  background: linear-gradient(135deg, rgba(224, 122, 95, 0.13), var(--surface-card) 65%);
+}
+
+.standingIcon {
+  flex-shrink: 0;
+  display: flex;
+}
+
+.toneOk .standingIcon {
+  color: var(--status-success);
+}
+.toneWarn .standingIcon {
+  color: var(--status-warning);
+}
+.toneBad .standingIcon {
+  color: var(--status-error);
+}
+
+.standingText {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.standingText strong {
+  font-family: var(--font-heading);
+  font-size: 1.05rem;
+  font-weight: 800;
+}
+
+.standingText span {
+  font-size: 0.87rem;
+  color: var(--text-secondary);
+  line-height: 1.55;
+}
+
+/* ── Inline notices ── */
+
+.noticeWarn,
+.noticeMuted {
+  display: flex;
+  align-items: flex-start;
+  gap: 11px;
+  padding: 14px 18px;
+  border-radius: var(--radius-lg);
+  font-size: 0.87rem;
+  line-height: 1.55;
+}
+
+.noticeWarn {
+  background: rgba(244, 162, 97, 0.14);
+  border: 1px solid rgba(244, 162, 97, 0.4);
+  color: #8a5312;
+}
+
+.noticeMuted {
+  background: var(--surface-warm);
+  border: 1px solid rgba(61, 64, 91, 0.12);
+  color: var(--text-secondary);
+}
+
+.noticeWarn svg,
+.noticeMuted svg {
+  flex-shrink: 0;
+  margin-top: 1px;
+}
+
+/* ── Layout ── */
+
+.columns {
+  display: grid;
+  grid-template-columns: minmax(0, 1.6fr) minmax(0, 1fr);
+  gap: 18px;
+  align-items: start;
+}
+
+.colMain,
+.colSide {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+  min-width: 0;
+}
+
+/* ── Cards ── */
+
+.card {
+  background: var(--surface-card);
+  border-radius: var(--radius-xl);
+  box-shadow: var(--clay-shadow-sm);
+  padding: 22px 24px;
+}
+
+.card h2 {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  font-family: var(--font-heading);
+  font-size: 0.78rem;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--text-muted);
+  margin: 0 0 16px;
+}
+
+.card h2 svg {
+  color: var(--color-primary);
+}
+
+.countPill {
+  margin-left: auto;
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0;
+  background: var(--surface-warm);
+  color: var(--text-secondary);
+  padding: 2px 9px;
+  border-radius: var(--radius-pill);
+}
+
+.subHead {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  font-family: var(--font-heading);
+  font-size: 0.74rem;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--text-muted);
+  margin: 22px 0 12px;
+  padding-top: 16px;
+  border-top: 1px dashed rgba(61, 64, 91, 0.12);
+}
+
+.note {
+  font-size: 0.82rem;
+  color: var(--text-secondary);
+  line-height: 1.6;
+  margin: 14px 0 0;
+}
+
+.empty {
+  font-size: 0.86rem;
+  color: var(--text-muted);
+  margin: 0;
+}
+
+.badText {
+  color: var(--status-error);
+  font-weight: 700;
+}
+
+.actionCard .note {
+  margin: 0 0 14px;
+}
+
+/* ── Definition lists ── */
+
+.detailList {
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.detailRow {
+  display: flex;
+  align-items: baseline;
+  gap: 12px;
+  padding: 9px 0;
+  border-bottom: 1px dashed rgba(61, 64, 91, 0.08);
+  font-size: 0.89rem;
+}
+
+.detailRow:last-child {
+  border-bottom: none;
+}
+
+.detailRow dt {
+  color: var(--text-muted);
+  min-width: 140px;
+  flex-shrink: 0;
+  font-size: 0.84rem;
+}
+
+.detailRow dd {
+  margin: 0;
+  font-weight: 600;
+  color: var(--text-primary);
+  overflow-wrap: anywhere;
+}
+
+.detailRow code,
+.sealLine code {
+  font-size: 0.85rem;
+  background: var(--surface-warm);
+  padding: 2px 7px;
+  border-radius: 5px;
+  letter-spacing: 0.03em;
+}
+
+.mapLink {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  color: var(--color-primary);
+  text-decoration: none;
+  font-weight: 600;
+}
+
+.mapLink:hover {
+  text-decoration: underline;
+}
+
+/* ── Ownership / movement history ── */
+
+.history {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.history li {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  padding-left: 12px;
+  border-left: 2px solid rgba(129, 178, 154, 0.45);
+}
+
+.history strong {
+  display: block;
+  font-size: 0.87rem;
+}
+
+.history p {
+  font-size: 0.82rem;
+  color: var(--text-secondary);
+  line-height: 1.5;
+  margin: 3px 0 0;
+}
+
+.historyNote {
+  font-style: italic;
+}
+
+.history time {
+  font-size: 0.75rem;
+  color: var(--text-muted);
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
+/* ── Certificate / application rows ── */
+
+.rowList {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.rowList li {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 14px;
+  border-radius: var(--radius-md);
+  background: var(--surface-warm);
+}
+
+.rowCurrent {
+  background: rgba(129, 178, 154, 0.14);
+  box-shadow: inset 0 0 0 1px rgba(129, 178, 154, 0.4);
+}
+
+.rowMain {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.rowSub {
+  font-size: 0.78rem;
+  color: var(--text-secondary);
+  line-height: 1.45;
+}
+
+.rowSide {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-shrink: 0;
+}
+
+.currentTag {
+  font-size: 0.68rem;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--color-secondary-dark);
+}
+
+.rowLink {
+  display: flex;
+  color: var(--text-muted);
+  padding: 3px;
+}
+
+.rowLink:hover {
+  color: var(--color-primary);
+}
+
+/* ── Inspections ── */
+
+.inspectionList {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.inspectionList li {
+  padding: 13px 15px;
+  border-radius: var(--radius-md);
+  background: var(--surface-warm);
+}
+
+/* A corrected inspection is kept and shown, dimmed — the chain of custody
+   requires that a superseded version stay visible, not disappear. */
+.superseded {
+  opacity: 0.62;
+}
+
+.inspTop {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  flex-wrap: wrap;
+}
+
+.versionTag {
+  font-size: 0.7rem;
+  color: var(--text-muted);
+  background: var(--surface-card);
+  padding: 2px 8px;
+  border-radius: var(--radius-pill);
+}
+
+.inspMeta {
+  font-size: 0.79rem;
+  color: var(--text-secondary);
+  line-height: 1.5;
+  margin: 7px 0 0;
+}
+
+.sealLine {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 0.79rem;
+  color: var(--text-secondary);
+  margin: 6px 0 0;
+}
+
+.sealLine svg {
+  color: var(--status-success);
+  flex-shrink: 0;
+}
+
+/* ── Risk flags (officials only) ── */
+
+.riskCard {
+  border-left: 4px solid var(--status-warning);
+}
+
+.riskList {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.riskList li {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+}
+
+.riskList > li > div {
+  flex: 1;
+  min-width: 0;
+}
+
+.riskList strong {
+  display: block;
+  font-size: 0.9rem;
+}
+
+.reasonList {
+  margin: 6px 0 0;
+  padding-left: 18px;
+  font-size: 0.81rem;
+  color: var(--text-secondary);
+  line-height: 1.55;
+}
+
+.recommended {
+  font-size: 0.81rem;
+  color: var(--color-primary-dark);
+  font-weight: 600;
+  margin: 6px 0 0;
+}
+
+.riskList time {
+  display: block;
+  font-size: 0.74rem;
+  color: var(--text-muted);
+  margin-top: 5px;
+}
+
+/* ── Tolerance table and document list ── */
+
+.toleranceTable {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.83rem;
+}
+
+.toleranceTable th {
+  text-align: left;
+  font-family: var(--font-heading);
+  font-size: 0.72rem;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--text-muted);
+  padding: 0 0 7px;
+  border-bottom: 1px solid rgba(61, 64, 91, 0.12);
+}
+
+.toleranceTable td {
+  padding: 7px 0;
+  border-bottom: 1px dashed rgba(61, 64, 91, 0.08);
+}
+
+.toleranceTable tr:last-child td {
+  border-bottom: none;
+}
+
+.toleranceTable td:last-child {
+  text-align: right;
+  font-weight: 700;
+}
+
+.docList {
+  margin: 0;
+  padding-left: 18px;
+  font-size: 0.84rem;
+  color: var(--text-secondary);
+  line-height: 1.7;
+}
+
+/* ── Photographs ── */
+
+.photoGrid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+  gap: 12px;
+}
+
+.photo {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  text-decoration: none;
+  color: var(--text-secondary);
+}
+
+.photo img {
+  width: 100%;
+  aspect-ratio: 4 / 3;
+  object-fit: cover;
+  border-radius: var(--radius-md);
+  box-shadow: var(--clay-shadow-sm);
+  background: var(--surface-warm);
+}
+
+.photo span {
+  font-size: 0.75rem;
+  line-height: 1.4;
+}
+
+.photo:hover img {
+  box-shadow: var(--clay-shadow-md);
+}
+
+/* ── Timeline ── */
+
+.timeline {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.timeline li {
+  display: flex;
+  gap: 14px;
+  padding-bottom: 18px;
+  position: relative;
+}
+
+.timeline li:not(:last-child)::before {
+  content: '';
+  position: absolute;
+  left: 5px;
+  top: 16px;
+  bottom: 0;
+  width: 2px;
+  background: rgba(61, 64, 91, 0.12);
+}
+
+.timeline li:last-child {
+  padding-bottom: 0;
+}
+
+.timelineDot {
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  background: var(--text-muted);
+  flex-shrink: 0;
+  margin-top: 5px;
+  z-index: 1;
+}
+
+.dotOk {
+  background: var(--status-success);
+}
+
+.dotBad {
+  background: var(--status-error);
+}
+
+.dotInfo {
+  background: var(--color-secondary);
+}
+
+.timeline strong {
+  display: block;
+  font-family: var(--font-heading);
+  font-size: 0.88rem;
+  font-weight: 700;
+}
+
+.timeline p {
+  font-size: 0.84rem;
+  color: var(--text-secondary);
+  line-height: 1.55;
+  margin: 4px 0 3px;
+}
+
+.timeline time {
+  font-size: 0.75rem;
+  color: var(--text-muted);
+}
+
+/* ── Dialog forms ── */
+
+.form {
+  display: flex;
+  flex-direction: column;
+  gap: 15px;
+}
+
+.field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.fieldRow {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+  gap: 12px;
+}
+
+.hint {
+  font-style: normal;
+  font-size: 0.76rem;
+  color: var(--text-muted);
+  line-height: 1.5;
+}
+
+.formNote {
+  font-size: 0.83rem;
+  color: var(--text-secondary);
+  line-height: 1.6;
+  background: var(--surface-warm);
+  padding: 12px 14px;
+  border-radius: var(--radius-md);
+  margin: 0;
+}
+
+.formWarn,
+.formError {
+  display: flex;
+  align-items: flex-start;
+  gap: 9px;
+  font-size: 0.84rem;
+  line-height: 1.55;
+  background: rgba(224, 122, 95, 0.12);
+  color: #9c3b21;
+  border: 1px solid rgba(224, 122, 95, 0.34);
+  border-radius: var(--radius-md);
+  padding: 12px 14px;
+  margin: 0 0 4px;
+}
+
+.formWarn svg,
+.formError svg {
+  flex-shrink: 0;
+  margin-top: 2px;
+}
+
+.gpsRow {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.formActions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+  padding-top: 4px;
+}
+
+@media (max-width: 1024px) {
+  .columns {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+@media (max-width: 640px) {
+  .headerTitleRow h1 {
+    font-size: 1.3rem;
+  }
+  .card {
+    padding: 18px 16px;
+  }
+  .detailRow {
+    flex-direction: column;
+    gap: 3px;
+  }
+  .detailRow dt {
+    min-width: 0;
+  }
+  .history li {
+    flex-direction: column;
+    gap: 4px;
+  }
+  .rowList li {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+  .formActions {
+    flex-direction: column-reverse;
+  }
+  .formActions button {
+    width: 100%;
+  }
+}

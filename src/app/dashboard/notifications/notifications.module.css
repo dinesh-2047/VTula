@@ -1,12 +1,31 @@
 .page {
-  animation: fadeInUp 0.4s ease;
+  animation: global(fadeInUp) 0.4s ease;
+}
+
+.loadingWrap {
+  min-height: 320px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+}
+
+.loadingWrap p {
+  color: var(--text-secondary);
+  font-size: 0.9rem;
+}
+
+.spin {
+  animation: global(claySpin) 0.8s linear infinite;
 }
 
 .pageHeader {
   display: flex;
-  align-items: center;
+  align-items: flex-start;
   justify-content: space-between;
-  margin-bottom: 28px;
+  gap: 16px;
+  margin-bottom: 20px;
 }
 
 .pageHeader h1 {
@@ -19,7 +38,102 @@
   color: var(--text-secondary);
   font-size: 0.875rem;
   margin-top: 4px;
+  max-width: 60ch;
+  line-height: 1.6;
 }
+
+.headerActions {
+  display: flex;
+  gap: 10px;
+  flex-shrink: 0;
+}
+
+.errorBox {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 13px 16px;
+  border-radius: var(--radius-md);
+  background: rgba(224, 122, 95, 0.12);
+  color: #9c3b21;
+  font-size: 0.85rem;
+  line-height: 1.55;
+  margin-bottom: 18px;
+}
+
+.errorBox svg {
+  flex-shrink: 0;
+  margin-top: 1px;
+}
+
+/* --- filter tabs ---------------------------------------------------------- */
+
+.toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 12px;
+  margin-bottom: 18px;
+}
+
+.tabs {
+  display: flex;
+  gap: 8px;
+}
+
+/*
+ * The counts come from the endpoint's aggregate over the whole inbox, not from
+ * the rows on screen, so "Unread 3" stays true even when the list is filtered.
+ */
+.tab {
+  border: none;
+  cursor: pointer;
+  font-family: var(--font-body);
+  font-size: 0.82rem;
+  font-weight: 600;
+  padding: 9px 15px;
+  border-radius: var(--radius-pill);
+  background: var(--surface-card);
+  color: var(--text-secondary);
+  box-shadow: var(--clay-shadow-sm);
+  transition: all 0.2s;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.tab:hover {
+  color: var(--text-primary);
+  transform: translateY(-1px);
+}
+
+.tabActive,
+.tabActive:hover {
+  background: var(--color-primary);
+  color: #fff;
+  box-shadow: var(--clay-shadow-md);
+}
+
+.tabCount {
+  font-size: 0.72rem;
+  font-weight: 700;
+  padding: 1px 7px;
+  border-radius: var(--radius-pill);
+  background: rgba(61, 64, 91, 0.08);
+  color: inherit;
+}
+
+.tabActive .tabCount {
+  background: rgba(255, 255, 255, 0.28);
+}
+
+.toolbarNote {
+  font-size: 0.76rem;
+  color: var(--text-muted);
+}
+
+/* --- list ----------------------------------------------------------------- */
 
 .list {
   display: flex;
@@ -31,7 +145,7 @@
   background: var(--surface-card);
   border-radius: var(--radius-lg);
   box-shadow: var(--clay-shadow-sm);
-  padding: 20px 24px;
+  padding: 18px 20px;
   display: flex;
   align-items: flex-start;
   gap: 16px;
@@ -41,7 +155,7 @@
 
 .unread {
   border-left: 4px solid var(--color-primary);
-  background: #FFFDFC;
+  background: #fffdfc;
 }
 
 .read {
@@ -52,11 +166,15 @@
   width: 40px;
   height: 40px;
   border-radius: var(--radius-md);
-  background: var(--surface-warm);
   display: flex;
   align-items: center;
   justify-content: center;
   flex-shrink: 0;
+}
+
+.info {
+  flex: 1;
+  min-width: 0;
 }
 
 .info h4 {
@@ -68,7 +186,15 @@
 .info p {
   font-size: 0.88rem;
   color: var(--text-secondary);
-  margin-bottom: 6px;
+  line-height: 1.55;
+  margin-bottom: 8px;
+}
+
+.cardFooter {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 14px;
 }
 
 .time {
@@ -76,16 +202,122 @@
   color: var(--text-muted);
 }
 
+/* The deep link written on the notification, which used to go unrendered. */
+.actionLink {
+  border: none;
+  background: none;
+  cursor: pointer;
+  padding: 0;
+  font-family: var(--font-body);
+  font-size: 0.78rem;
+  font-weight: 700;
+  color: var(--color-primary-dark);
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  transition: gap 0.2s;
+}
+
+.actionLink:hover:not(:disabled) {
+  gap: 7px;
+}
+
+.footerBtn {
+  border: none;
+  background: none;
+  cursor: pointer;
+  padding: 0;
+  font-family: var(--font-body);
+  font-size: 0.78rem;
+  font-weight: 600;
+  color: var(--text-secondary);
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.footerBtn:hover:not(:disabled) {
+  color: var(--text-primary);
+}
+
+.actionLink:disabled,
+.footerBtn:disabled,
+.dismissBtn:disabled,
+.dangerLink:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.dismissBtn {
+  border: none;
+  background: none;
+  cursor: pointer;
+  color: var(--text-muted);
+  width: 30px;
+  height: 30px;
+  border-radius: var(--radius-sm);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  transition: all 0.2s;
+}
+
+.dismissBtn:hover:not(:disabled) {
+  background: var(--surface-warm);
+  color: var(--text-primary);
+}
+
 .emptyState {
   display: flex;
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  min-height: 360px;
+  min-height: 320px;
   text-align: center;
   gap: 12px;
 }
 
+.emptyState h3 {
+  font-family: var(--font-heading);
+  font-size: 1.2rem;
+  font-weight: 800;
+}
+
+.emptyState p {
+  color: var(--text-secondary);
+  font-size: 0.88rem;
+  max-width: 42ch;
+  line-height: 1.6;
+}
+
+/* --- destructive, kept apart ---------------------------------------------- */
+
+.dangerZone {
+  margin-top: 28px;
+  padding-top: 18px;
+  border-top: 1px solid rgba(61, 64, 91, 0.08);
+  text-align: center;
+}
+
+.dangerLink {
+  border: none;
+  background: none;
+  cursor: pointer;
+  font-family: var(--font-body);
+  font-size: 0.78rem;
+  font-weight: 600;
+  color: var(--text-muted);
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
+.dangerLink:hover:not(:disabled) {
+  color: var(--status-error);
+}
+
 @media (max-width: 640px) {
   .pageHeader { flex-direction: column; align-items: flex-start; gap: 12px; }
+  .headerActions { width: 100%; }
+  .card { padding: 16px; gap: 12px; }
 }

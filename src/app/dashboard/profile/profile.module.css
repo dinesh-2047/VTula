@@ -1,5 +1,27 @@
+/*
+ * The signed-in user's own account page.
+ *
+ * `animation: global(name)` is required — CSS Modules rewrites the identifier in
+ * an `animation` declaration into this file's scope, so a keyframe defined in
+ * `globals.css` would otherwise resolve to nothing and silently not animate.
+ */
+
 .page {
-  animation: fadeInUp 0.4s ease;
+  animation: global(fadeInUp) 0.4s ease;
+}
+
+.loadingWrap {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  min-height: 400px;
+  gap: 16px;
+  color: var(--text-muted);
+}
+
+.spin {
+  animation: global(claySpin) 0.8s linear infinite;
 }
 
 .pageHeader {
@@ -19,22 +41,55 @@
 }
 
 .container {
-  max-width: 700px;
+  max-width: 760px;
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
 }
 
 .card {
   background: var(--surface-card);
   border-radius: var(--radius-xl);
   box-shadow: var(--clay-shadow-md);
-  padding: 32px;
+  padding: 28px 32px;
   border: 1px solid rgba(255, 255, 255, 0.8);
+}
+
+.card h2 {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-family: var(--font-heading);
+  font-size: 1.05rem;
+  font-weight: 700;
+}
+
+.card h2 svg {
+  color: var(--color-primary);
+}
+
+.sectionNote {
+  font-size: 0.84rem;
+  line-height: 1.65;
+  color: var(--text-secondary);
+  margin: 8px 0 20px;
+}
+
+.noteLink {
+  color: var(--color-primary-dark);
+  font-weight: 600;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+.noteLink:hover {
+  color: var(--color-primary);
 }
 
 .userHead {
   display: flex;
   align-items: center;
   gap: 16px;
-  margin-bottom: 28px;
   padding-bottom: 20px;
   border-bottom: 1px dashed rgba(61, 64, 91, 0.1);
 }
@@ -52,42 +107,149 @@
   font-weight: 800;
   font-size: 1.5rem;
   box-shadow: var(--clay-shadow-sm);
+  flex-shrink: 0;
+}
+
+.userHeadText {
+  min-width: 0;
 }
 
 .userHead h3 {
   font-family: var(--font-heading);
   font-size: 1.25rem;
   font-weight: 800;
-  margin-bottom: 4px;
+  margin-bottom: 8px;
+}
+
+.badgeRow {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.userHeadMeta {
+  font-size: 0.78rem;
+  color: var(--text-muted);
+  margin-top: 8px;
+}
+
+/* What the account is responsible for — an owner's estate, an officer's caseload. */
+.activity {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+  gap: 12px;
+  margin-top: 20px;
+}
+
+.stat {
+  display: flex;
+  align-items: center;
+  gap: 11px;
+  background: var(--surface-warm);
+  border-radius: var(--radius-md);
+  padding: 13px 15px;
+}
+
+.stat svg {
+  color: var(--color-secondary);
+  flex-shrink: 0;
+}
+
+.stat strong {
+  display: block;
+  font-family: var(--font-heading);
+  font-size: 1.2rem;
+  font-weight: 800;
+  line-height: 1.1;
+}
+
+.stat span {
+  font-size: 0.72rem;
+  color: var(--text-muted);
+  line-height: 1.35;
 }
 
 .formGrid {
   display: grid;
   grid-template-columns: repeat(2, 1fr);
-  gap: 20px;
+  gap: 18px;
+  margin-top: 16px;
+}
+
+.readGrid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 16px;
+}
+
+.readGrid span {
+  display: block;
+  font-size: 0.72rem;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--text-muted);
+  margin-bottom: 3px;
+}
+
+.readGrid strong {
+  font-family: var(--font-heading);
+  font-size: 0.9rem;
+  font-weight: 600;
+}
+
+.hint {
+  display: block;
+  font-size: 0.75rem;
+  color: var(--text-muted);
+  margin-top: 5px;
+  line-height: 1.5;
 }
 
 .actions {
   display: flex;
   justify-content: flex-end;
-  margin-top: 28px;
+  margin-top: 24px;
   padding-top: 20px;
   border-top: 1px solid rgba(61, 64, 91, 0.06);
 }
 
-.successBanner {
+.successBanner,
+.errorBox {
   display: flex;
-  align-items: center;
-  gap: 8px;
+  align-items: flex-start;
+  gap: 9px;
   padding: 12px 16px;
-  background: var(--status-success-bg);
-  color: #2E7D32;
   border-radius: var(--radius-md);
-  font-size: 0.88rem;
+  font-size: 0.86rem;
+  line-height: 1.5;
+}
+
+.successBanner {
+  background: var(--status-success-bg);
+  color: #2e7d32;
   font-weight: 600;
-  margin-bottom: 20px;
+}
+
+.errorBox {
+  background: rgba(224, 122, 95, 0.12);
+  border: 1px solid rgba(224, 122, 95, 0.34);
+  color: #9c3b21;
+}
+
+.successBanner svg,
+.errorBox svg {
+  flex-shrink: 0;
+  margin-top: 1px;
 }
 
 @media (max-width: 640px) {
-  .formGrid { grid-template-columns: 1fr; }
+  .formGrid {
+    grid-template-columns: 1fr;
+  }
+  .formGrid > div[style*='span 2'] {
+    grid-column: auto !important;
+  }
+  .card {
+    padding: 22px 18px;
+  }
 }

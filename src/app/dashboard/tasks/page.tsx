@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback, useMemo, type ChangeEvent } from 'react';
 import { useSession } from 'next-auth/react';
 import Link from 'next/link';
 import {
@@ -13,36 +13,89 @@ import {
   ShieldCheck,
   Loader2,
   Camera,
-  User,
   Scale,
   Award,
-  Eye,
   Crosshair,
   Clock,
-  ImageIcon,
-  Printer,
-  Download,
-  FileCheck,
+  FileSearch,
+  Gavel,
+  Layers,
+  AlertTriangle,
+  Trash2,
+  ExternalLink,
+  Paperclip,
+  CalendarClock,
+  Info,
+  TriangleAlert,
 } from 'lucide-react';
+import {
+  APPLICATION_STATUS_LABELS,
+  DOCUMENT_TYPE_LABELS,
+  MAX_UPLOAD_BYTES,
+  VERIFICATION_TYPE_LABELS,
+  applicationStatusLabel,
+  daysUntil,
+  formatDate,
+  formatDateTime,
+  type ApplicationStatus,
+} from '@/lib/constants';
 import styles from './tasks.module.css';
 
-interface InspectionTask {
+/**
+ * The officer / inspector work console.
+ *
+ * What this replaces, in the words of what it actually did:
+ *
+ *  - It rendered a "Digital Signature: HMAC-SHA256-<mongo id>" line on a
+ *    certificate shown to users. That is a template string, not a signature. The
+ *    real one is produced by `signCertificateData()` server-side and is never
+ *    reconstructible in a browser.
+ *  - When an approved application had no certificate, it *invented* one —
+ *    `LMO-CERT-<app no>`, issued today, expiring in exactly one year, sealed with
+ *    `LMO-SEAL-VERIFIED` — and offered it for print. A printed certificate with a
+ *    fabricated number is a forged government document.
+ *  - Calibration readings were one free-text box, pre-filled with
+ *    "Tolerance Class III — ±0.1g compliance verified" before the instrument had
+ *    been touched, and the inspector chose PASS or FAIL by clicking a button.
+ *  - The seal number was `LMO-STAMP-${Math.random()}`, generated in the browser.
+ *  - When the device refused location access it silently substituted Delhi
+ *    (28.6139, 77.209) and recorded that as the inspection's GPS evidence.
+ *  - Photographs were read into base64 data-URLs and posted inside the JSON body.
+ *  - The QR code was fetched from `api.qrserver.com`, so verifying a certificate
+ *    depended on a third party and leaked every certificate number to it.
+ *
+ * Everything here now goes through the endpoints that own each concern and audit
+ * it: `/api/inspections` computes pass/fail from the rule's tolerance table,
+ * `/api/documents` stores evidence with a SHA-256, `/api/schedules` books the
+ * visit and picks the inspector, and `/api/applications/[id]/transition` is the
+ * only way a status moves. The buttons this page offers come from the server's own
+ * `availableTransitions`, so it cannot present an action the server would refuse.
+ */
+
+/* ------------------------------------------------------------------ *
+ * API shapes
+ * ------------------------------------------------------------------ */
+
+interface Populated {
+  _id: string;
+  name?: string;
+  role?: string;
+  designation?: string;
+}
+
+interface QueueTask {
   _id: string;
   applicationNo: string;
   type: string;
-  status: string;
-  submittedDate: string;
-  inspectionLocation?: string;
+  status: ApplicationStatus;
+  submittedDate?: string;
+  dueDate?: string;
+  feeAmount?: number;
   feePaid?: number;
   feeStatus?: string;
-  remarks?: string;
-  certificateId?: any;
-  inspectionData?: {
-    readings?: string;
-    remarks?: string;
-    result?: string;
-    photos?: { url: string; gpsLat?: number; gpsLng?: number; timestamp?: string }[];
-  };
+  priorityScore?: number;
+  priorityReasons?: string[];
+  jurisdiction?: { state?: string; district?: string };
   instrumentId?: {
     _id: string;
     type: string;
@@ -50,889 +103,1911 @@ interface InspectionTask {
     model: string;
     serialNo: string;
     capacity?: string;
+    accuracyClass?: string;
     address?: string;
     installationDistrict?: string;
     installationState?: string;
-    photos?: string[];
+    gpsCoordinates?: { lat: number; lng: number };
   };
   ownerId?: {
     _id: string;
-    name: string;
-    email: string;
-    phone?: string;
+    name?: string;
     organizationName?: string;
+    phone?: string;
+    email?: string;
   };
+  assignedTo?: Populated;
+  inspection?: {
+    _id: string;
+    inspectionNo: string;
+    version: number;
+    result: 'PASS' | 'FAIL' | 'INCONCLUSIVE';
+    isSubmitted: boolean;
+    inspectedAt?: string;
+    gpsDriftMetres?: number;
+    readings?: { label: string; reference: number; observed: number; errorPercent: number; withinTolerance: boolean }[];
+  } | null;
+  schedule?: {
+    _id: string;
+    scheduledDate?: string;
+    slotStart?: string;
+    slotEnd?: string;
+    status?: string;
+    assignedTo?: Populated;
+    assignmentRationale?: string[];
+  } | null;
+  riskFlags?: {
+    _id: string;
+    flagType: string;
+    level: string;
+    score: number;
+    title: string;
+    reasons?: string[];
+    recommendedAction?: string;
+  }[];
+  availableTransitions?: ApplicationStatus[];
 }
+
+interface TemplateReading {
+  label: string;
+  reference: number;
+  observed: null;
+  unit: string;
+  maxErrorPercent: number;
+}
+
+interface InspectionTemplate {
+  applicationNo: string;
+  instrument: {
+    id: string;
+    label: string;
+    type: string;
+    capacity?: string;
+    address?: string;
+    district?: string;
+    state?: string;
+    registeredGps?: { lat: number; lng: number };
+  };
+  readings: TemplateReading[];
+  conformityChecks: { code: string; label: string; result: 'PASS' | 'FAIL' | 'NA' }[];
+  requirements: {
+    minEvidencePhotos: number;
+    requireGpsEvidence: boolean;
+    gpsToleranceMetres: number;
+    legalReference?: string;
+  };
+  appliedRule: { name: string; matchedScope: string };
+}
+
+interface UploadedEvidence {
+  id: string;
+  fileName: string;
+  sizeBytes: number;
+  sha256: string;
+  href: string;
+}
+
+interface IssuedCertificate {
+  id: string;
+  certNo: string;
+  expiryDate: string;
+  qrDataUrl: string;
+}
+
+/* ------------------------------------------------------------------ *
+ * Queue stages
+ * ------------------------------------------------------------------ */
+
+const STAGES = [
+  {
+    key: 'review',
+    label: 'Review',
+    icon: FileSearch,
+    statuses: ['SUBMITTED', 'UNDER_REVIEW', 'RESUBMITTED'] as ApplicationStatus[],
+  },
+  {
+    key: 'scheduling',
+    label: 'Scheduling',
+    icon: CalendarClock,
+    statuses: ['APPROVED_FOR_SCHEDULING', 'SCHEDULED'] as ApplicationStatus[],
+  },
+  {
+    key: 'inspection',
+    label: 'Inspection',
+    icon: ClipboardCheck,
+    statuses: ['INSPECTION_IN_PROGRESS', 'INSPECTION_SUBMITTED'] as ApplicationStatus[],
+  },
+  {
+    key: 'decision',
+    label: 'Decision',
+    icon: Gavel,
+    statuses: ['UNDER_DECISION'] as ApplicationStatus[],
+  },
+  {
+    key: 'certificate',
+    label: 'Certificate',
+    icon: Award,
+    statuses: ['APPROVED'] as ApplicationStatus[],
+  },
+  { key: 'all', label: 'All open', icon: Layers, statuses: [] as ApplicationStatus[] },
+] as const;
+
+type StageKey = (typeof STAGES)[number]['key'];
+
+/**
+ * What each transition asks of the officer.
+ *
+ * `requires` is not cosmetic: the server refuses `QUERY_RAISED` without a message
+ * and `APPROVED`/`REJECTED` without a written justification, so a form that did
+ * not collect them would produce a confusing 400 rather than a clear prompt.
+ */
+const TRANSITIONS: Record<
+  string,
+  {
+    label: string;
+    heading: string;
+    help: string;
+    requires: 'justification' | 'reason' | 'none';
+    tone: 'primary' | 'secondary' | 'ghost';
+    icon: typeof CheckCircle;
+  }
+> = {
+  UNDER_REVIEW: {
+    label: 'Begin review',
+    heading: 'Take this application under review',
+    help: 'Records that this file is now with you. The applicant sees that it has been picked up.',
+    requires: 'none',
+    tone: 'primary',
+    icon: FileSearch,
+  },
+  QUERY_RAISED: {
+    label: 'Raise a query',
+    heading: 'Ask the applicant for something',
+    help: 'The applicant is notified and the file waits with them. Say plainly what they must provide.',
+    requires: 'reason',
+    tone: 'secondary',
+    icon: Info,
+  },
+  APPROVED_FOR_SCHEDULING: {
+    label: 'Clear for scheduling',
+    heading: 'Clear the paperwork and send this for scheduling',
+    help: 'The documents are in order. The file becomes bookable for a field visit.',
+    requires: 'none',
+    tone: 'primary',
+    icon: CheckCircle,
+  },
+  INSPECTION_IN_PROGRESS: {
+    label: 'Mark visit started',
+    heading: 'Record that the inspection visit has begun',
+    help: 'Use this when the inspector has reached the site.',
+    requires: 'none',
+    tone: 'ghost',
+    icon: Clock,
+  },
+  UNDER_DECISION: {
+    label: 'Take for decision',
+    heading: 'Take the inspection report for decision',
+    help: 'Moves the report onto your desk for approval or rejection.',
+    requires: 'none',
+    tone: 'primary',
+    icon: Gavel,
+  },
+  APPROVED: {
+    label: 'Approve',
+    heading: 'Approve this application',
+    help: 'Only possible on a submitted inspection that passed. Your justification is recorded against the decision and is visible to the applicant.',
+    requires: 'justification',
+    tone: 'primary',
+    icon: CheckCircle,
+  },
+  REJECTED: {
+    label: 'Reject',
+    heading: 'Reject this application',
+    help: 'The instrument is marked unverified and the failure is counted against the business. State the grounds — the applicant is entitled to know them.',
+    requires: 'justification',
+    tone: 'secondary',
+    icon: XCircle,
+  },
+  CERTIFICATE_GENERATED: {
+    label: 'Issue certificate',
+    heading: 'Issue the verification certificate',
+    help: 'Signs and registers the certificate, supersedes any earlier one for this instrument, and notifies the business. Validity comes from the applicable rule, not from a fixed one year.',
+    requires: 'none',
+    tone: 'primary',
+    icon: Award,
+  },
+  CANCELLED: {
+    label: 'Cancel',
+    heading: 'Cancel this application',
+    help: 'Closes the file with no verification. Say why.',
+    requires: 'reason',
+    tone: 'ghost',
+    icon: Trash2,
+  },
+};
+
+/** Handled by `/api/schedules`, not by the transition endpoint. */
+const SCHEDULE_TRANSITION = 'SCHEDULED';
+
+/* ------------------------------------------------------------------ *
+ * Page
+ * ------------------------------------------------------------------ */
 
 export default function TasksPage() {
   const { data: session } = useSession();
-  const [tasks, setTasks] = useState<InspectionTask[]>([]);
+
+  const [tasks, setTasks] = useState<QueueTask[]>([]);
+  const [counts, setCounts] = useState<Record<string, number>>({});
+  const [scope, setScope] = useState<{ role: string; state: string | null; district: string | null } | null>(null);
   const [loading, setLoading] = useState(true);
-  const [activeTab, setActiveTab] = useState<'pending' | 'verified' | 'all'>('pending');
-  const [searchQuery, setSearchQuery] = useState('');
-  const [filterType, setFilterType] = useState('all');
+  const [loadError, setLoadError] = useState<string | null>(null);
 
-  // Inspection Modal state
-  const [selectedTask, setSelectedTask] = useState<InspectionTask | null>(null);
-  const [verdict, setVerdict] = useState<'Approve' | 'Reject'>('Approve');
-  const [remarks, setRemarks] = useState('');
-  const [stampNo, setStampNo] = useState('');
-  const [readings, setReadings] = useState('');
-  const [photoUrls, setPhotoUrls] = useState<string[]>([]);
-  const [gpsLat, setGpsLat] = useState<number | null>(null);
-  const [gpsLng, setGpsLng] = useState<number | null>(null);
-  const [capturingGps, setCapturingGps] = useState(false);
-  const [submitting, setSubmitting] = useState(false);
+  const [stage, setStage] = useState<StageKey>('review');
+  const [search, setSearch] = useState('');
+  const [onlyMine, setOnlyMine] = useState(false);
 
-  // Detail Modal state
-  const [detailTask, setDetailTask] = useState<InspectionTask | null>(null);
-  // Full photo preview state
-  const [previewPhoto, setPreviewPhoto] = useState<string | null>(null);
+  const [detailTask, setDetailTask] = useState<QueueTask | null>(null);
+  const [issued, setIssued] = useState<IssuedCertificate | null>(null);
+  const [banner, setBanner] = useState<{ tone: 'ok' | 'bad'; text: string } | null>(null);
+  /* Bumped to re-run the queue query — after an action, or when the officer
+   * retries a failed load. */
+  const [reloadKey, setReloadKey] = useState(0);
 
-  // Certificate PDF viewer modal state
-  const [selectedCertPdf, setSelectedCertPdf] = useState<any | null>(null);
+  // `session.user.role` is typed by the augmentation in `src/types/next-auth.d.ts`,
+  // so no cast is needed. `scope.role` is the server's own answer and is the
+  // fallback while the session is still resolving.
+  const userRole = session?.user?.role ?? scope?.role ?? '';
 
-  const userName = session?.user?.name || 'Legal Metrology Officer';
-  const userRole = (session?.user as { role?: string })?.role || 'LMO';
-  const userEmail = session?.user?.email || 'lmo.officer@vtula.gov.in';
+  const reload = useCallback(() => setReloadKey((k) => k + 1), []);
 
   useEffect(() => {
-    fetchTasks();
-  }, []);
-
-  const fetchTasks = async () => {
-    try {
-      const res = await fetch('/api/tasks');
-      const data = await res.json();
-      if (data.success) {
-        setTasks(data.applications || []);
-      }
-    } catch (err) {
-      console.error('Fetch tasks error:', err);
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const handleOpenStampModal = (task: InspectionTask) => {
-    setSelectedTask(task);
-    setVerdict('Approve');
-    setRemarks('');
-    setStampNo(`LMO-STAMP-${Math.floor(10000 + Math.random() * 90000)}`);
-    setReadings('Tolerance Class III — ±0.1g compliance verified');
-    setPhotoUrls([]);
-    setGpsLat(null);
-    setGpsLng(null);
-    handleGetGps();
-  };
-
-  const handleGetGps = () => {
-    if ('geolocation' in navigator) {
-      setCapturingGps(true);
-      navigator.geolocation.getCurrentPosition(
-        (pos) => {
-          setGpsLat(pos.coords.latitude);
-          setGpsLng(pos.coords.longitude);
-          setCapturingGps(false);
-        },
-        (err) => {
-          console.warn('GPS location fallback used:', err.message);
-          setGpsLat(28.6139);
-          setGpsLng(77.209);
-          setCapturingGps(false);
-        },
-        { timeout: 8000 }
-      );
-    } else {
-      setGpsLat(28.6139);
-      setGpsLng(77.209);
-    }
-  };
-
-  const handleAddSamplePhoto = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const files = e.target.files;
-    if (!files || files.length === 0) return;
-
-    for (let i = 0; i < files.length; i++) {
-      const reader = new FileReader();
-      reader.onload = (event) => {
-        if (event.target?.result) {
-          setPhotoUrls((prev) => [...prev, event.target!.result as string]);
+    let cancelled = false;
+    (async () => {
+      try {
+        const params = new URLSearchParams({ limit: '100' });
+        if (onlyMine) params.set('assignedToMe', 'true');
+        const res = await fetch(`/api/tasks?${params.toString()}`);
+        const data = await res.json();
+        if (cancelled) return;
+        if (!res.ok || !data.success) {
+          setLoadError(data.error ?? 'The work queue could not be loaded.');
+          return;
         }
-      };
-      reader.readAsDataURL(files[i]);
-    }
-  };
-
-  const handleStampSubmit = async () => {
-    if (!selectedTask) return;
-    setSubmitting(true);
-
-    try {
-      const res = await fetch('/api/tasks', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          applicationId: selectedTask._id,
-          verdict,
-          remarks,
-          stampNo,
-          readings,
-          photos: photoUrls,
-          gpsLat,
-          gpsLng,
-        }),
-      });
-
-      const data = await res.json();
-      if (data.success) {
-        alert(
-          verdict === 'Approve'
-            ? `Inspection complete! Certificate issued successfully.`
-            : `Application rejected.`
-        );
-        setSelectedTask(null);
-        fetchTasks();
-
-        if (data.certificate) {
-          setSelectedCertPdf(data.certificate);
+        setTasks(data.tasks ?? []);
+        setCounts(data.countsByStatus ?? {});
+        setScope(data.scope ?? null);
+        setLoadError(null);
+      } catch {
+        if (!cancelled) {
+          setLoadError('The work queue could not be reached. Check your connection and try again.');
         }
-      } else {
-        alert(data.error || 'Failed to complete inspection');
+      } finally {
+        if (!cancelled) setLoading(false);
       }
-    } catch (err) {
-      console.error('Stamp submit error:', err);
-      alert('Network error completing inspection');
-    } finally {
-      setSubmitting(false);
-    }
-  };
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [onlyMine, reloadKey]);
 
-  const openCertModalForTask = (task: InspectionTask) => {
-    if (typeof task.certificateId === 'object' && task.certificateId !== null) {
-      setSelectedCertPdf(task.certificateId);
-    } else {
-      setSelectedCertPdf({
-        certNo: `LMO-CERT-${task.applicationNo.replace('APP-', '')}`,
-        issuedDate: task.submittedDate,
-        expiryDate: new Date(
-          new Date(task.submittedDate).setFullYear(new Date(task.submittedDate).getFullYear() + 1)
-        ).toISOString(),
-        digitalSignature: `HMAC-SHA256-${task._id}`,
-        instrumentSnapshot: {
-          type: task.instrumentId?.type || 'Scale',
-          brand: task.instrumentId?.brand || 'Brand',
-          model: task.instrumentId?.model || 'Model',
-          serialNo: task.instrumentId?.serialNo || 'SN',
-          capacity: task.instrumentId?.capacity || 'Standard Limit',
-        },
-        ownerSnapshot: {
-          name: task.ownerId?.name || 'Trader',
-          email: task.ownerId?.email || 'trader@vtula.gov.in',
-        },
-      });
-    }
-  };
+  /* Search and stage filtering happen client-side over the fetched page; the
+   * counts in the tabs come from the server's aggregate over the whole scope, so
+   * a tab never claims a number the query did not produce. */
+  const visible = useMemo(() => {
+    const stageDef = STAGES.find((s) => s.key === stage);
+    const q = search.trim().toLowerCase();
 
-  const handlePrintPdf = () => {
-    if (typeof window !== 'undefined') {
-      window.print();
-    }
-  };
-
-  // Filter tasks logic
-  const filteredTasks = tasks.filter((task) => {
-    if (activeTab === 'pending' && (task.status === 'Approved' || task.status === 'Rejected')) {
-      return false;
-    }
-    if (activeTab === 'verified' && task.status !== 'Approved') {
-      return false;
-    }
-    if (filterType !== 'all' && task.type?.toLowerCase() !== filterType.toLowerCase()) {
-      return false;
-    }
-    if (searchQuery.trim() !== '') {
-      const q = searchQuery.toLowerCase();
-      const matchAppNo = task.applicationNo?.toLowerCase().includes(q);
-      const matchOwner = task.ownerId?.name?.toLowerCase().includes(q);
-      const matchSerial = task.instrumentId?.serialNo?.toLowerCase().includes(q);
-      const matchType = task.instrumentId?.type?.toLowerCase().includes(q);
-      const matchDistrict = task.instrumentId?.installationDistrict?.toLowerCase().includes(q);
-      return matchAppNo || matchOwner || matchSerial || matchType || matchDistrict;
-    }
-    return true;
-  });
-
-  const pendingCount = tasks.filter((t) => t.status !== 'Approved' && t.status !== 'Rejected').length;
-  const verifiedCount = tasks.filter((t) => t.status === 'Approved').length;
-
-  const formatDate = (dateStr: string) => {
-    if (!dateStr) return 'N/A';
-    return new Date(dateStr).toLocaleDateString('en-IN', {
-      day: '2-digit',
-      month: 'short',
-      year: 'numeric',
+    return tasks.filter((t) => {
+      if (stageDef && stageDef.statuses.length > 0 && !stageDef.statuses.includes(t.status)) {
+        return false;
+      }
+      if (!q) return true;
+      return [
+        t.applicationNo,
+        t.ownerId?.name,
+        t.ownerId?.organizationName,
+        t.instrumentId?.serialNo,
+        t.instrumentId?.type,
+        t.instrumentId?.brand,
+        t.jurisdiction?.district,
+      ]
+        .filter(Boolean)
+        .some((field) => String(field).toLowerCase().includes(q));
     });
-  };
+  }, [tasks, stage, search]);
+
+  const stageCount = useCallback(
+    (statuses: readonly ApplicationStatus[]) =>
+      statuses.length === 0
+        ? Object.values(counts).reduce((sum, n) => sum + n, 0)
+        : statuses.reduce((sum, s) => sum + (counts[s] ?? 0), 0),
+    [counts]
+  );
+
+  const afterAction = useCallback(
+    (message: string, certificate?: IssuedCertificate) => {
+      setBanner({ tone: 'ok', text: message });
+      if (certificate) setIssued(certificate);
+      setDetailTask(null);
+      reload();
+    },
+    [reload]
+  );
 
   if (loading) {
     return (
-      <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', minHeight: 350, gap: 12 }}>
+      <div className={styles.loadingWrap}>
         <Loader2 size={36} className={styles.spin} style={{ color: 'var(--color-primary)' }} />
-        <p>Fetching Legal Metrology inspection queue...</p>
+        <p>Loading your work queue…</p>
       </div>
     );
   }
 
   return (
     <div className={styles.page}>
-      {/* Header */}
       <div className={styles.pageHeader}>
         <div>
-          <h1>LMO Inspection Console</h1>
-          <p>Field verification, GPS geo-evidence capture, technical calibration, and electronic stamping.</p>
+          <h1>Verification Console</h1>
+          <p>
+            Applications awaiting action from you
+            {scope?.district ? ` in ${scope.district}, ${scope.state}` : scope?.state ? ` in ${scope.state}` : ''}
+            . Ordered by advisory priority — every score is explained on the card.
+          </p>
         </div>
 
-        {/* Inspector Identity Chip */}
-        <div
-          style={{
-            background: 'var(--surface-card)',
-            padding: '10px 16px',
-            borderRadius: 'var(--radius-lg)',
-            boxShadow: 'var(--clay-shadow-sm)',
-            border: '1px solid rgba(255, 255, 255, 0.8)',
-            display: 'flex',
-            alignItems: 'center',
-            gap: 12,
-          }}
-        >
-          <div
-            style={{
-              width: 38,
-              height: 38,
-              borderRadius: '50%',
-              background: 'linear-gradient(135deg, var(--color-primary), var(--color-accent))',
-              color: '#fff',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              fontWeight: 800,
-            }}
-          >
-            {userName.charAt(0)}
-          </div>
-          <div>
-            <div style={{ fontSize: '0.88rem', fontWeight: 800, color: 'var(--text-primary)' }}>
-              {userName} <span className="clay-badge clay-badge-primary" style={{ fontSize: '0.65rem', marginLeft: 4 }}>{userRole}</span>
-            </div>
-            <div style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>
-              Dept. of Legal Metrology Enforcement
+        {scope && (
+          <div className={styles.scopeChip}>
+            <ShieldCheck size={16} />
+            <div>
+              <strong>{scope.role}</strong>
+              <span>
+                {scope.district
+                  ? `${scope.district}, ${scope.state}`
+                  : scope.state ?? 'All jurisdictions'}
+              </span>
             </div>
           </div>
-        </div>
+        )}
       </div>
 
-      {/* Tabs & Controls Bar */}
-      <div className={styles.controlsBar}>
-        {/* Status Tabs */}
-        <div className="clay-tabs" style={{ display: 'flex', width: 'auto', margin: 0 }}>
-          <button
-            className={`clay-tab ${activeTab === 'pending' ? 'active' : ''}`}
-            onClick={() => setActiveTab('pending')}
-          >
-            <Clock size={15} style={{ display: 'inline', marginRight: 6 }} />
-            Pending ({pendingCount})
-          </button>
-          <button
-            className={`clay-tab ${activeTab === 'verified' ? 'active' : ''}`}
-            onClick={() => setActiveTab('verified')}
-          >
-            <ShieldCheck size={15} style={{ display: 'inline', marginRight: 6 }} />
-            Verified ({verifiedCount})
-          </button>
-          <button
-            className={`clay-tab ${activeTab === 'all' ? 'active' : ''}`}
-            onClick={() => setActiveTab('all')}
-          >
-            All ({tasks.length})
+      {banner && (
+        <div className={banner.tone === 'ok' ? styles.bannerOk : styles.bannerBad}>
+          {banner.tone === 'ok' ? <CheckCircle size={17} /> : <TriangleAlert size={17} />}
+          <span>{banner.text}</span>
+          <button type="button" onClick={() => setBanner(null)} aria-label="Dismiss">
+            ✕
           </button>
         </div>
+      )}
 
-        {/* Search & Filter */}
+      {loadError && (
+        <div className={styles.bannerBad}>
+          <TriangleAlert size={17} />
+          <span>{loadError}</span>
+          <button type="button" onClick={reload}>
+            Retry
+          </button>
+        </div>
+      )}
+
+      <div className={styles.controlsBar}>
+        <div className="clay-tabs" style={{ display: 'flex', flexWrap: 'wrap', width: 'auto', margin: 0 }}>
+          {STAGES.map((s) => {
+            const Icon = s.icon;
+            return (
+              <button
+                key={s.key}
+                className={`clay-tab ${stage === s.key ? 'active' : ''}`}
+                onClick={() => setStage(s.key)}
+              >
+                <Icon size={15} style={{ display: 'inline', marginRight: 6 }} />
+                {s.label} ({stageCount(s.statuses)})
+              </button>
+            );
+          })}
+        </div>
+
         <div className={styles.searchWrap}>
           <div style={{ position: 'relative', flex: 1 }}>
-            <Search size={16} style={{ position: 'absolute', left: 12, top: 13, color: 'var(--text-muted)' }} />
+            <Search size={16} className={styles.searchIcon} />
             <input
               type="text"
               className={`clay-input ${styles.searchInput}`}
-              placeholder="Search App No, Owner, Serial No..."
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
+              placeholder="Application no, business, serial no, district…"
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
             />
           </div>
-
-          <select
-            className={`clay-input clay-select ${styles.filterSelect}`}
-            value={filterType}
-            onChange={(e) => setFilterType(e.target.value)}
-          >
-            <option value="all">All Types</option>
-            <option value="initial">Initial</option>
-            <option value="re-verification">Re-verification</option>
-          </select>
+          <label className={styles.mineToggle}>
+            <input type="checkbox" checked={onlyMine} onChange={(e) => setOnlyMine(e.target.checked)} />
+            Assigned to me
+          </label>
         </div>
       </div>
 
-      {/* Task Cards Grid */}
-      {filteredTasks.length === 0 ? (
-        <div className="clay-card" style={{ textAlign: 'center', padding: '40px 20px' }}>
-          <ClipboardCheck size={48} style={{ color: 'var(--text-muted)', marginBottom: 12 }} />
-          <h3>No Inspection Tasks Found</h3>
-          <p style={{ color: 'var(--text-secondary)', fontSize: '0.9rem' }}>
-            {activeTab === 'pending'
-              ? 'Great job! There are currently no pending inspection applications in your queue.'
-              : 'No applications matched your search filters.'}
+      {visible.length === 0 ? (
+        <div className="clay-card" style={{ textAlign: 'center', padding: '44px 20px' }}>
+          <ClipboardCheck size={46} style={{ color: 'var(--text-muted)', marginBottom: 12 }} />
+          <h3>Nothing waiting here</h3>
+          <p style={{ color: 'var(--text-secondary)', fontSize: '0.9rem', maxWidth: 460, margin: '6px auto 0' }}>
+            {search
+              ? 'No application in this stage matched your search.'
+              : `No application is currently at the ${STAGES.find((s) => s.key === stage)?.label.toLowerCase()} stage in your jurisdiction.`}
           </p>
         </div>
       ) : (
         <div className={styles.grid}>
-          {filteredTasks.map((task) => {
-            const instPhotos = task.instrumentId?.photos || [];
-
-            return (
-              <div key={task._id} className={styles.taskCard}>
-                <div className={styles.cardHeader}>
-                  <div className={styles.taskIcon}>
-                    <ClipboardCheck size={22} />
-                  </div>
-                  <div style={{ flex: 1 }}>
-                    <div className={styles.appNo}>{task.applicationNo}</div>
-                    <div className={styles.ownerName}>
-                      Owner: <strong>{task.ownerId?.name || 'Trader'}</strong>
-                    </div>
-                  </div>
-                  <span
-                    className={`clay-badge ${
-                      task.status === 'Approved'
-                        ? 'clay-badge-success'
-                        : task.status === 'Rejected'
-                        ? 'clay-badge-error'
-                        : 'clay-badge-warning'
-                    }`}
-                  >
-                    {task.status}
-                  </span>
-                </div>
-
-                <div style={{ flex: 1 }}>
-                  <div className={styles.instTitle}>
-                    {task.instrumentId?.type || 'Measuring Instrument'}
-                  </div>
-                  <div className={styles.instSub}>
-                    Brand: <strong>{task.instrumentId?.brand}</strong> | Model: <strong>{task.instrumentId?.model}</strong>
-                  </div>
-
-                  <div className={styles.infoRow}>
-                    <Scale size={14} />
-                    <span>Serial No:</span>
-                    <strong style={{ fontFamily: 'monospace' }}>{task.instrumentId?.serialNo || '—'}</strong>
-                  </div>
-
-                  {/* Registered Instrument Photos Gallery */}
-                  <div style={{ marginTop: 10, marginBottom: 6 }}>
-                    <div style={{ fontSize: '0.78rem', fontWeight: 600, color: 'var(--text-muted)', marginBottom: 4, display: 'flex', alignItems: 'center', gap: 4 }}>
-                      <ImageIcon size={13} /> Registered Photos ({instPhotos.length})
-                    </div>
-
-                    {instPhotos.length > 0 ? (
-                      <div style={{ display: 'flex', gap: 6, overflowX: 'auto', paddingBottom: 4 }}>
-                        {instPhotos.map((photoUrl, pIdx) => (
-                          <div
-                            key={pIdx}
-                            onClick={() => setPreviewPhoto(photoUrl)}
-                            style={{
-                              width: 54,
-                              height: 54,
-                              borderRadius: 'var(--radius-sm)',
-                              overflow: 'hidden',
-                              border: '1px solid var(--clay-border)',
-                              cursor: 'pointer',
-                              flexShrink: 0,
-                            }}
-                            title="Click to view full photo"
-                          >
-                            <img src={photoUrl} alt="Registered scale" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
-                          </div>
-                        ))}
-                      </div>
-                    ) : (
-                      <div style={{ fontSize: '0.78rem', color: 'var(--text-muted)', fontStyle: 'italic', background: 'var(--surface-warm)', padding: '6px 10px', borderRadius: 'var(--radius-sm)' }}>
-                        No photos uploaded by trader.
-                      </div>
-                    )}
-                  </div>
-
-                  {task.instrumentId?.address && (
-                    <div className={styles.infoRow} style={{ marginTop: 6 }}>
-                      <MapPin size={14} style={{ color: 'var(--text-muted)' }} />
-                      <span style={{ fontWeight: 600 }}>Venue:</span>
-                      <span>{task.instrumentId.address}, {task.instrumentId.installationDistrict}</span>
-                    </div>
-                  )}
-
-                  <div className={styles.infoRow} style={{ marginTop: 4 }}>
-                    <Calendar size={14} />
-                    <span>Filed: {formatDate(task.submittedDate)}</span>
-                    <span className="clay-badge clay-badge-info" style={{ marginLeft: 'auto', textTransform: 'capitalize' }}>
-                      {task.type}
-                    </span>
-                  </div>
-                </div>
-
-                <div className={styles.cardFooter} style={{ display: 'flex', gap: 8 }}>
-                  <button
-                    className="clay-btn clay-btn-ghost clay-btn-sm"
-                    style={{ flex: 1 }}
-                    onClick={() => setDetailTask(task)}
-                  >
-                    <Eye size={15} />
-                    Full Specs
-                  </button>
-
-                  {task.status !== 'Approved' && task.status !== 'Rejected' ? (
-                    <button
-                      className="clay-btn clay-btn-primary clay-btn-sm"
-                      style={{ flex: 2 }}
-                      onClick={() => handleOpenStampModal(task)}
-                    >
-                      <ShieldCheck size={15} />
-                      Inspect & Stamp
-                    </button>
-                  ) : (
-                    <button
-                      className="clay-btn clay-btn-primary clay-btn-sm"
-                      style={{ flex: 2 }}
-                      onClick={() => openCertModalForTask(task)}
-                    >
-                      <Download size={15} />
-                      Download PDF
-                    </button>
-                  )}
-                </div>
-              </div>
-            );
-          })}
+          {visible.map((task) => (
+            <TaskCard key={task._id} task={task} onOpen={() => setDetailTask(task)} />
+          ))}
         </div>
       )}
 
-      {/* Inspection & Stamping Modal */}
-      {selectedTask && (
-        <div className="clay-modal-overlay">
-          <div className="clay-modal" style={{ maxWidth: 640, maxHeight: '90vh', overflowY: 'auto' }}>
-            <div className="clay-modal-header">
-              <h3 className="clay-modal-title">Perform Field Inspection & Digital Seal</h3>
-              <button
-                className="clay-btn clay-btn-sm clay-btn-ghost"
-                onClick={() => setSelectedTask(null)}
-              >
-                ✕
-              </button>
+      {detailTask && (
+        <TaskDetail
+          task={detailTask}
+          role={userRole}
+          onClose={() => setDetailTask(null)}
+          onDone={afterAction}
+          onError={(text) => setBanner({ tone: 'bad', text })}
+        />
+      )}
+
+      {issued && <CertificateIssued certificate={issued} onClose={() => setIssued(null)} />}
+    </div>
+  );
+}
+
+/* ------------------------------------------------------------------ *
+ * Queue card
+ * ------------------------------------------------------------------ */
+
+function TaskCard({ task, onOpen }: { task: QueueTask; onOpen: () => void }) {
+  // `daysUntil` is negative once the date has passed. The SLA clock is the whole
+  // reason this queue exists, so an overdue file says so on its face.
+  const dueIn = daysUntil(task.dueDate);
+  const overdueDays = dueIn !== null && dueIn < 0 ? -dueIn : null;
+  const flags = task.riskFlags ?? [];
+
+  return (
+    <div className={styles.taskCard}>
+      <div className={styles.cardHeader}>
+        <div className={styles.taskIcon}>
+          <ClipboardCheck size={22} />
+        </div>
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <div className={styles.appNo}>{task.applicationNo}</div>
+          <div className={styles.ownerName}>
+            {task.ownerId?.organizationName || task.ownerId?.name || 'Business not recorded'}
+          </div>
+        </div>
+        <span className={`clay-badge ${badgeFor(task.status)}`}>{applicationStatusLabel(task.status)}</span>
+      </div>
+
+      <div style={{ flex: 1 }}>
+        <div className={styles.instTitle}>{task.instrumentId?.type ?? 'Instrument not recorded'}</div>
+        <div className={styles.instSub}>
+          {task.instrumentId?.brand} {task.instrumentId?.model}
+          {task.instrumentId?.capacity ? ` · ${task.instrumentId.capacity}` : ''}
+        </div>
+
+        <div className={styles.infoRow}>
+          <Scale size={14} />
+          <span>Serial</span>
+          <strong style={{ fontFamily: 'var(--font-mono, monospace)' }}>
+            {task.instrumentId?.serialNo ?? '—'}
+          </strong>
+        </div>
+
+        {task.instrumentId?.address && (
+          <div className={styles.infoRow}>
+            <MapPin size={14} />
+            <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+              {task.instrumentId.address}
+              {task.instrumentId.installationDistrict ? `, ${task.instrumentId.installationDistrict}` : ''}
+            </span>
+          </div>
+        )}
+
+        <div className={styles.infoRow}>
+          <Calendar size={14} />
+          <span>Filed {formatDate(task.submittedDate)}</span>
+          <span className="clay-badge clay-badge-info" style={{ marginLeft: 'auto' }}>
+            {VERIFICATION_TYPE_LABELS[task.type as keyof typeof VERIFICATION_TYPE_LABELS] ?? task.type}
+          </span>
+        </div>
+
+        {task.dueDate && (
+          <div className={styles.infoRow}>
+            <Clock size={14} />
+            {overdueDays !== null && overdueDays > 0 ? (
+              <strong style={{ color: 'var(--color-danger, #c0392b)' }}>
+                {overdueDays} day{overdueDays === 1 ? '' : 's'} past its due date
+              </strong>
+            ) : (
+              <span>Due {formatDate(task.dueDate)}</span>
+            )}
+          </div>
+        )}
+
+        {task.schedule?.scheduledDate && (
+          <div className={styles.infoRow}>
+            <CalendarClock size={14} />
+            <span>
+              Visit {formatDate(task.schedule.scheduledDate)}
+              {task.schedule.slotStart ? `, ${task.schedule.slotStart}` : ''}
+              {task.schedule.assignedTo?.name ? ` — ${task.schedule.assignedTo.name}` : ''}
+            </span>
+          </div>
+        )}
+
+        {task.inspection && (
+          <div className={styles.infoRow}>
+            <ShieldCheck size={14} />
+            <span>
+              {task.inspection.inspectionNo}
+              {task.inspection.version > 1 ? ` (v${task.inspection.version})` : ''}
+            </span>
+            <span
+              className={`clay-badge ${
+                task.inspection.result === 'PASS'
+                  ? 'clay-badge-success'
+                  : task.inspection.result === 'FAIL'
+                    ? 'clay-badge-error'
+                    : 'clay-badge-warning'
+              }`}
+              style={{ marginLeft: 'auto' }}
+            >
+              {task.inspection.isSubmitted ? task.inspection.result : 'Draft'}
+            </span>
+          </div>
+        )}
+
+        {(task.priorityReasons?.length ?? 0) > 0 && (
+          <details className={styles.priorityBox}>
+            <summary>
+              Priority {task.priorityScore ?? 0}
+              <span> · why?</span>
+            </summary>
+            <ul>
+              {task.priorityReasons!.map((r, i) => (
+                <li key={i}>{r}</li>
+              ))}
+            </ul>
+          </details>
+        )}
+
+        {flags.length > 0 && (
+          <div className={styles.flagStrip}>
+            <AlertTriangle size={14} />
+            <span>
+              {flags.length} risk signal{flags.length === 1 ? '' : 's'} — advisory only
+            </span>
+          </div>
+        )}
+      </div>
+
+      <div className={styles.cardFooter}>
+        <button className="clay-btn clay-btn-primary clay-btn-sm" style={{ width: '100%' }} onClick={onOpen}>
+          Open file
+        </button>
+      </div>
+    </div>
+  );
+}
+
+function badgeFor(status: string): string {
+  switch (status) {
+    case 'APPROVED':
+    case 'CERTIFICATE_GENERATED':
+    case 'ACTIVE':
+      return 'clay-badge-success';
+    case 'REJECTED':
+    case 'CANCELLED':
+      return 'clay-badge-error';
+    case 'QUERY_RAISED':
+      return 'clay-badge-warning';
+    default:
+      return 'clay-badge-info';
+  }
+}
+
+/* ------------------------------------------------------------------ *
+ * File detail + actions
+ * ------------------------------------------------------------------ */
+
+function TaskDetail({
+  task,
+  role,
+  onClose,
+  onDone,
+  onError,
+}: {
+  task: QueueTask;
+  role: string;
+  onClose: () => void;
+  onDone: (message: string, certificate?: IssuedCertificate) => void;
+  onError: (text: string) => void;
+}) {
+  const [mode, setMode] = useState<'file' | 'inspect' | 'schedule' | ApplicationStatus>('file');
+
+  const transitions = (task.availableTransitions ?? []).filter((t) => TRANSITIONS[t] || t === SCHEDULE_TRANSITION);
+  const canInspect = ['SCHEDULED', 'INSPECTION_IN_PROGRESS', 'INSPECTION_SUBMITTED'].includes(task.status);
+
+  if (mode === 'inspect') {
+    return (
+      <InspectionForm
+        task={task}
+        onCancel={() => setMode('file')}
+        onDone={onDone}
+        onError={onError}
+      />
+    );
+  }
+
+  if (mode === 'schedule') {
+    return <ScheduleForm task={task} onCancel={() => setMode('file')} onDone={onDone} onError={onError} />;
+  }
+
+  if (mode !== 'file') {
+    return (
+      <TransitionForm
+        task={task}
+        target={mode}
+        onCancel={() => setMode('file')}
+        onDone={onDone}
+        onError={onError}
+      />
+    );
+  }
+
+  return (
+    <div className="clay-modal-overlay">
+      <div className="clay-modal" style={{ maxWidth: 700, maxHeight: '92vh', overflowY: 'auto' }}>
+        <div className="clay-modal-header">
+          <div>
+            <h3 className="clay-modal-title">{task.applicationNo}</h3>
+            <p style={{ fontSize: '0.82rem', color: 'var(--text-secondary)', margin: '2px 0 0' }}>
+              {applicationStatusLabel(task.status)} ·{' '}
+              {VERIFICATION_TYPE_LABELS[task.type as keyof typeof VERIFICATION_TYPE_LABELS] ?? task.type}
+            </p>
+          </div>
+          <button className="clay-btn clay-btn-sm clay-btn-ghost" onClick={onClose}>
+            ✕
+          </button>
+        </div>
+
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+          <section className={styles.modalInfoBox}>
+            <h4>Business</h4>
+            <div>
+              <strong>{task.ownerId?.organizationName || task.ownerId?.name || 'Not recorded'}</strong>
+              {task.ownerId?.organizationName && task.ownerId?.name ? ` — ${task.ownerId.name}` : ''}
             </div>
+            {task.ownerId?.phone && <div>{task.ownerId.phone}</div>}
+            {task.ownerId?.email && <div>{task.ownerId.email}</div>}
+          </section>
 
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
-              {/* Application Summary Banner */}
-              <div style={{ background: 'var(--surface-warm)', padding: 14, borderRadius: 'var(--radius-md)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                <div>
-                  <div style={{ fontWeight: 800, fontSize: '0.95rem' }}>{selectedTask.applicationNo}</div>
-                  <div style={{ fontSize: '0.82rem', color: 'var(--text-secondary)' }}>
-                    {selectedTask.instrumentId?.type} — SN: <strong>{selectedTask.instrumentId?.serialNo}</strong>
+          <section className={styles.modalInfoBox}>
+            <h4>Instrument</h4>
+            <div>
+              {task.instrumentId?.type} — {task.instrumentId?.brand} {task.instrumentId?.model}
+            </div>
+            <div>
+              Serial <strong style={{ fontFamily: 'var(--font-mono, monospace)' }}>{task.instrumentId?.serialNo}</strong>
+              {task.instrumentId?.capacity ? ` · Capacity ${task.instrumentId.capacity}` : ''}
+              {task.instrumentId?.accuracyClass ? ` · Class ${task.instrumentId.accuracyClass}` : ''}
+            </div>
+            <div>
+              {task.instrumentId?.address}
+              {task.instrumentId?.installationDistrict ? `, ${task.instrumentId.installationDistrict}` : ''}
+              {task.instrumentId?.installationState ? `, ${task.instrumentId.installationState}` : ''}
+            </div>
+            {task.instrumentId?._id && (
+              <Link href={`/dashboard/instruments/${task.instrumentId._id}`} className={styles.inlineLink}>
+                Open the instrument&apos;s full history <ExternalLink size={12} />
+              </Link>
+            )}
+          </section>
+
+          <section className={styles.modalInfoBox}>
+            <h4>Fee</h4>
+            <div>
+              Assessed ₹{(task.feeAmount ?? 0).toLocaleString('en-IN')} · Received ₹
+              {(task.feePaid ?? 0).toLocaleString('en-IN')} ·{' '}
+              <span className={`clay-badge ${task.feeStatus === 'Paid' ? 'clay-badge-success' : 'clay-badge-warning'}`}>
+                {task.feeStatus ?? 'Unpaid'}
+              </span>
+            </div>
+            {task.feeStatus !== 'Paid' && task.feeStatus !== 'Waived' && (
+              <p className={styles.note}>
+                A certificate cannot be issued until the statutory fee is paid or formally waived.
+              </p>
+            )}
+          </section>
+
+          {task.inspection && (
+            <section className={styles.modalInfoBox}>
+              <h4>Inspection on file</h4>
+              <div>
+                {task.inspection.inspectionNo} (v{task.inspection.version}) —{' '}
+                <strong>{task.inspection.isSubmitted ? task.inspection.result : 'unsubmitted draft'}</strong>
+                {task.inspection.inspectedAt ? ` · ${formatDateTime(task.inspection.inspectedAt)}` : ''}
+              </div>
+              {task.inspection.gpsDriftMetres != null && (
+                <div>Captured {task.inspection.gpsDriftMetres} m from the registered site.</div>
+              )}
+              {(task.inspection.readings?.length ?? 0) > 0 && (
+                <table className={styles.readingTable}>
+                  <thead>
+                    <tr>
+                      <th>Test point</th>
+                      <th>Reference</th>
+                      <th>Observed</th>
+                      <th>Error</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {task.inspection.readings!.map((r, i) => (
+                      <tr key={i} className={r.withinTolerance ? undefined : styles.rowFail}>
+                        <td>{r.label}</td>
+                        <td>{r.reference}</td>
+                        <td>{r.observed}</td>
+                        <td>{r.errorPercent?.toFixed(3)}%</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              )}
+            </section>
+          )}
+
+          {(task.riskFlags?.length ?? 0) > 0 && (
+            <section className={styles.riskBox}>
+              <h4>
+                <AlertTriangle size={15} /> Risk signals
+              </h4>
+              <p className={styles.note}>
+                Advisory only. These order your attention and decide nothing — the decision is yours.
+              </p>
+              {task.riskFlags!.map((f) => (
+                <div key={f._id} className={styles.riskItem}>
+                  <div>
+                    <strong>{f.title}</strong>
+                    <span className="clay-badge clay-badge-warning" style={{ marginLeft: 8 }}>
+                      {f.level} · {f.score}
+                    </span>
                   </div>
+                  {(f.reasons?.length ?? 0) > 0 && (
+                    <ul>
+                      {f.reasons!.map((r, i) => (
+                        <li key={i}>{r}</li>
+                      ))}
+                    </ul>
+                  )}
+                  {f.recommendedAction && <p className={styles.note}>Suggested: {f.recommendedAction}</p>}
                 </div>
-                <span className="clay-badge clay-badge-primary">Owner: {selectedTask.ownerId?.name}</span>
-              </div>
+              ))}
+            </section>
+          )}
 
-              {/* Inspector Badge */}
-              <div style={{ background: 'rgba(224, 122, 95, 0.08)', padding: 12, borderRadius: 'var(--radius-md)', border: '1px solid rgba(224, 122, 95, 0.2)', fontSize: '0.85rem' }}>
-                <strong>Verifying Inspector:</strong> {userName} ({userRole}) | ID: <span style={{ fontFamily: 'monospace' }}>{userEmail}</span>
+          {task.schedule && (
+            <section className={styles.modalInfoBox}>
+              <h4>Inspection slot</h4>
+              <div>
+                {formatDate(task.schedule.scheduledDate)}
+                {task.schedule.slotStart ? ` · ${task.schedule.slotStart}–${task.schedule.slotEnd ?? ''}` : ''} ·{' '}
+                {task.schedule.status}
               </div>
-
-              {/* Verdict Selection */}
-              <div className="clay-input-group">
-                <label className="clay-label">Verification Verdict</label>
-                <div style={{ display: 'flex', gap: 12 }}>
-                  <button
-                    type="button"
-                    className={`clay-btn ${verdict === 'Approve' ? 'clay-btn-primary' : 'clay-btn-ghost'}`}
-                    style={{ flex: 1 }}
-                    onClick={() => setVerdict('Approve')}
-                  >
-                    <CheckCircle size={16} /> Approve & Issue Certificate
-                  </button>
-                  <button
-                    type="button"
-                    className={`clay-btn ${verdict === 'Reject' ? 'clay-btn-secondary' : 'clay-btn-ghost'}`}
-                    style={{ flex: 1 }}
-                    onClick={() => setVerdict('Reject')}
-                  >
-                    <XCircle size={16} /> Reject Application
-                  </button>
-                </div>
-              </div>
-
-              {/* Electronic Stamp Number */}
-              {verdict === 'Approve' && (
-                <div className="clay-input-group">
-                  <label className="clay-label">Official Electronic Seal / Stamp No.</label>
-                  <input
-                    type="text"
-                    className="clay-input"
-                    value={stampNo}
-                    onChange={(e) => setStampNo(e.target.value)}
-                    placeholder="e.g. LMO-STAMP-98241"
-                  />
+              {task.schedule.assignedTo?.name && (
+                <div>
+                  Assigned to {task.schedule.assignedTo.name}
+                  {task.schedule.assignedTo.designation ? `, ${task.schedule.assignedTo.designation}` : ''}
                 </div>
               )}
+              {(task.schedule.assignmentRationale?.length ?? 0) > 0 && (
+                <ul className={styles.rationale}>
+                  {task.schedule.assignmentRationale!.map((r, i) => (
+                    <li key={i}>{r}</li>
+                  ))}
+                </ul>
+              )}
+            </section>
+          )}
 
-              {/* Calibration Readings */}
+          {/* Actions, taken from the server's own list of legal next steps. */}
+          <section>
+            <h4 style={{ fontSize: '0.9rem', marginBottom: 10 }}>What you can do now</h4>
+
+            {canInspect && (
+              <button
+                className="clay-btn clay-btn-primary"
+                style={{ width: '100%', marginBottom: 10 }}
+                onClick={() => setMode('inspect')}
+              >
+                <ClipboardCheck size={16} />
+                {task.inspection?.isSubmitted ? 'File a corrected inspection report' : 'Record the inspection'}
+              </button>
+            )}
+
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
+              {transitions.map((t) => {
+                if (t === SCHEDULE_TRANSITION) {
+                  return (
+                    <button
+                      key={t}
+                      className="clay-btn clay-btn-primary clay-btn-sm"
+                      onClick={() => setMode('schedule')}
+                    >
+                      <CalendarClock size={15} /> Book the inspection
+                    </button>
+                  );
+                }
+                const copy = TRANSITIONS[t];
+                const Icon = copy.icon;
+                return (
+                  <button
+                    key={t}
+                    className={`clay-btn clay-btn-${copy.tone} clay-btn-sm`}
+                    onClick={() => setMode(t)}
+                  >
+                    <Icon size={15} /> {copy.label}
+                  </button>
+                );
+              })}
+            </div>
+
+            {transitions.length === 0 && !canInspect && (
+              <p className={styles.note}>
+                No action is available to a {role || 'user'} at this stage. This file is waiting on someone else —
+                the applicant, an inspector, or a deciding officer.
+              </p>
+            )}
+          </section>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/* ------------------------------------------------------------------ *
+ * Transition
+ * ------------------------------------------------------------------ */
+
+function TransitionForm({
+  task,
+  target,
+  onCancel,
+  onDone,
+  onError,
+}: {
+  task: QueueTask;
+  target: ApplicationStatus;
+  onCancel: () => void;
+  onDone: (message: string, certificate?: IssuedCertificate) => void;
+  onError: (text: string) => void;
+}) {
+  const copy = TRANSITIONS[target];
+  const [text, setText] = useState('');
+  const [legalReference, setLegalReference] = useState('');
+  const [queryDueDays, setQueryDueDays] = useState(14);
+  const [requested, setRequested] = useState<string[]>([]);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const needsText = copy.requires !== 'none';
+
+  const submit = async () => {
+    if (needsText && text.trim().length < 10) {
+      setError(
+        copy.requires === 'justification'
+          ? 'A decision needs a written justification. It is recorded against the file and shown to the applicant.'
+          : 'Say what you need, in at least a few words.'
+      );
+      return;
+    }
+
+    setBusy(true);
+    setError(null);
+    try {
+      const res = await fetch(`/api/applications/${task._id}/transition`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          to: target,
+          ...(copy.requires === 'justification'
+            ? { justification: text.trim(), legalReference: legalReference.trim() || undefined }
+            : {}),
+          ...(copy.requires === 'reason' ? { reason: text.trim() } : {}),
+          ...(target === 'QUERY_RAISED'
+            ? { requestedDocuments: requested, queryDueDays }
+            : {}),
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok || !data.success) {
+        setError(data.error ?? 'The action could not be completed.');
+        return;
+      }
+
+      onDone(
+        target === 'CERTIFICATE_GENERATED'
+          ? `Certificate ${data.certificate?.certNo ?? ''} issued for ${task.applicationNo}.`
+          : `${task.applicationNo} is now ${APPLICATION_STATUS_LABELS[target] ?? target}.`,
+        data.certificate
+      );
+    } catch {
+      onError('The request could not be sent. Check your connection and try again.');
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <div className="clay-modal-overlay">
+      <div className="clay-modal" style={{ maxWidth: 560, maxHeight: '90vh', overflowY: 'auto' }}>
+        <div className="clay-modal-header">
+          <h3 className="clay-modal-title">{copy.heading}</h3>
+          <button className="clay-btn clay-btn-sm clay-btn-ghost" onClick={onCancel}>
+            ✕
+          </button>
+        </div>
+
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+          <p className={styles.note}>{copy.help}</p>
+
+          <div className={styles.modalInfoBox}>
+            <div>
+              <strong>{task.applicationNo}</strong> — {task.instrumentId?.type}, serial{' '}
+              {task.instrumentId?.serialNo}
+            </div>
+            <div>{task.ownerId?.organizationName || task.ownerId?.name}</div>
+          </div>
+
+          {needsText && (
+            <div className="clay-input-group">
+              <label className="clay-label">
+                {copy.requires === 'justification' ? 'Written justification' : 'Message to the applicant'}
+              </label>
+              <textarea
+                className="clay-input"
+                rows={4}
+                value={text}
+                onChange={(e) => setText(e.target.value)}
+                placeholder={
+                  copy.requires === 'justification'
+                    ? 'State the grounds for this decision, referring to the readings or the documents.'
+                    : 'e.g. The purchase invoice is illegible. Please upload a clear copy showing the serial number.'
+                }
+              />
+            </div>
+          )}
+
+          {target === 'QUERY_RAISED' && (
+            <>
               <div className="clay-input-group">
-                <label className="clay-label">Technical Calibration & Tolerance Test Readings</label>
+                <label className="clay-label">Documents you need (optional)</label>
+                <div className={styles.checkGrid}>
+                  {(Object.keys(DOCUMENT_TYPE_LABELS) as (keyof typeof DOCUMENT_TYPE_LABELS)[])
+                    .filter((k) => k !== 'INSPECTION_EVIDENCE')
+                    .map((k) => (
+                      <label key={k} className={styles.checkItem}>
+                        <input
+                          type="checkbox"
+                          checked={requested.includes(k)}
+                          onChange={(e) =>
+                            setRequested((prev) =>
+                              e.target.checked ? [...prev, k] : prev.filter((x) => x !== k)
+                            )
+                          }
+                        />
+                        {DOCUMENT_TYPE_LABELS[k]}
+                      </label>
+                    ))}
+                </div>
+              </div>
+              <div className="clay-input-group">
+                <label className="clay-label">Days allowed to respond</label>
                 <input
-                  type="text"
+                  type="number"
+                  min={1}
+                  max={90}
                   className="clay-input"
-                  value={readings}
-                  onChange={(e) => setReadings(e.target.value)}
-                  placeholder="e.g. Test Weight 20kg: Error +0.02g (Within Permissible Tolerance)"
+                  value={queryDueDays}
+                  onChange={(e) => setQueryDueDays(Math.max(1, Number(e.target.value) || 1))}
                 />
               </div>
+            </>
+          )}
 
-              {/* Live Geolocation Evidence */}
-              <div style={{ background: 'var(--surface-warm)', padding: 14, borderRadius: 'var(--radius-md)', fontSize: '0.85rem' }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 }}>
-                  <span style={{ fontWeight: 700, display: 'flex', alignItems: 'center', gap: 6 }}>
-                    <Crosshair size={16} style={{ color: 'var(--color-primary)' }} /> Live GPS Evidence Tagging
-                  </span>
-                  <button
-                    type="button"
-                    className="clay-btn clay-btn-sm clay-btn-ghost"
-                    onClick={handleGetGps}
-                    disabled={capturingGps}
-                  >
-                    {capturingGps ? 'Fetching GPS...' : 'Refresh Coordinates'}
-                  </button>
-                </div>
+          {copy.requires === 'justification' && (
+            <div className="clay-input-group">
+              <label className="clay-label">Legal reference (optional)</label>
+              <input
+                type="text"
+                className="clay-input"
+                value={legalReference}
+                onChange={(e) => setLegalReference(e.target.value)}
+                placeholder="e.g. Legal Metrology Act 2009, s.24"
+              />
+            </div>
+          )}
 
-                {gpsLat !== null && gpsLng !== null ? (
-                  <div style={{ fontFamily: 'monospace', background: 'white', padding: '8px 12px', borderRadius: 6, border: '1px solid var(--clay-border)', color: '#2b2d42' }}>
-                    Latitude: <strong>{gpsLat.toFixed(6)}° N</strong> | Longitude: <strong>{gpsLng.toFixed(6)}° E</strong>
-                  </div>
+          {target === 'CERTIFICATE_GENERATED' && (
+            <p className={styles.note}>
+              The certificate number, validity period and digital signature are all produced by the server. Nothing
+              on this screen can influence them.
+            </p>
+          )}
+
+          {error && (
+            <div className={styles.bannerBad}>
+              <TriangleAlert size={16} />
+              <span>{error}</span>
+            </div>
+          )}
+
+          <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 10 }}>
+            <button className="clay-btn clay-btn-ghost" onClick={onCancel} disabled={busy}>
+              Cancel
+            </button>
+            <button className={`clay-btn clay-btn-${copy.tone}`} onClick={submit} disabled={busy}>
+              {busy ? (
+                <>
+                  <Loader2 size={16} className={styles.spin} /> Working…
+                </>
+              ) : (
+                copy.label
+              )}
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/* ------------------------------------------------------------------ *
+ * Scheduling
+ * ------------------------------------------------------------------ */
+
+function ScheduleForm({
+  task,
+  onCancel,
+  onDone,
+  onError,
+}: {
+  task: QueueTask;
+  onCancel: () => void;
+  onDone: (message: string) => void;
+  onError: (text: string) => void;
+}) {
+  const today = new Date().toISOString().slice(0, 10);
+  const [date, setDate] = useState(today);
+  const [slotStart, setSlotStart] = useState('10:00');
+  const [slotEnd, setSlotEnd] = useState('12:00');
+  const [note, setNote] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [result, setResult] = useState<{
+    assignee: { name: string; role: string; designation?: string };
+    rationale: string[];
+    alternatives: { id: string; name: string; score: number; loadOnDate: number }[];
+    scheduledDate: string;
+  } | null>(null);
+
+  const submit = async () => {
+    setBusy(true);
+    setError(null);
+    try {
+      const res = await fetch('/api/schedules', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          applicationId: task._id,
+          scheduledDate: date,
+          slotStart,
+          slotEnd,
+          note: note.trim() || undefined,
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok || !data.success) {
+        setError(data.error ?? 'The slot could not be booked.');
+        return;
+      }
+      setResult({
+        assignee: data.assignee,
+        rationale: data.rationale ?? [],
+        alternatives: data.alternatives ?? [],
+        scheduledDate: data.schedule?.scheduledDate,
+      });
+    } catch {
+      onError('The request could not be sent. Check your connection and try again.');
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <div className="clay-modal-overlay">
+      <div className="clay-modal" style={{ maxWidth: 560, maxHeight: '90vh', overflowY: 'auto' }}>
+        <div className="clay-modal-header">
+          <h3 className="clay-modal-title">Book the inspection visit</h3>
+          <button className="clay-btn clay-btn-sm clay-btn-ghost" onClick={onCancel}>
+            ✕
+          </button>
+        </div>
+
+        {result ? (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+            <div className={styles.bannerOk}>
+              <CheckCircle size={17} />
+              <span>
+                Booked for {formatDate(result.scheduledDate)} with {result.assignee.name}.
+              </span>
+            </div>
+
+            <section className={styles.modalInfoBox}>
+              <h4>Why this inspector</h4>
+              <ul className={styles.rationale}>
+                {result.rationale.map((r, i) => (
+                  <li key={i}>{r}</li>
+                ))}
+              </ul>
+            </section>
+
+            {result.alternatives.length > 0 && (
+              <section className={styles.modalInfoBox}>
+                <h4>Others considered</h4>
+                <ul className={styles.rationale}>
+                  {result.alternatives.map((a) => (
+                    <li key={a.id}>
+                      {a.name} — ranking {a.score}, {a.loadOnDate} visit(s) already that day
+                    </li>
+                  ))}
+                </ul>
+              </section>
+            )}
+
+            <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
+              <button
+                className="clay-btn clay-btn-primary"
+                onClick={() => onDone(`${task.applicationNo} is scheduled for ${formatDate(result.scheduledDate)}.`)}
+              >
+                Done
+              </button>
+            </div>
+          </div>
+        ) : (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+            <p className={styles.note}>
+              Pick a date. The inspector is chosen by the department&apos;s own ranking — jurisdiction, category
+              approval and current load — and the reasoning is shown to you and kept on the record.
+            </p>
+
+            <div className={styles.modalInfoBox}>
+              <div>
+                <strong>{task.applicationNo}</strong> — {task.instrumentId?.type}, serial {task.instrumentId?.serialNo}
+              </div>
+              <div>
+                {task.instrumentId?.address}
+                {task.instrumentId?.installationDistrict ? `, ${task.instrumentId.installationDistrict}` : ''}
+              </div>
+            </div>
+
+            <div className="clay-input-group">
+              <label className="clay-label">Date of visit</label>
+              <input
+                type="date"
+                className="clay-input"
+                min={today}
+                value={date}
+                onChange={(e) => setDate(e.target.value)}
+              />
+            </div>
+
+            <div style={{ display: 'flex', gap: 12 }}>
+              <div className="clay-input-group" style={{ flex: 1 }}>
+                <label className="clay-label">From</label>
+                <input type="time" className="clay-input" value={slotStart} onChange={(e) => setSlotStart(e.target.value)} />
+              </div>
+              <div className="clay-input-group" style={{ flex: 1 }}>
+                <label className="clay-label">To</label>
+                <input type="time" className="clay-input" value={slotEnd} onChange={(e) => setSlotEnd(e.target.value)} />
+              </div>
+            </div>
+
+            <div className="clay-input-group">
+              <label className="clay-label">Note (optional)</label>
+              <input
+                type="text"
+                className="clay-input"
+                value={note}
+                onChange={(e) => setNote(e.target.value)}
+                placeholder="e.g. Owner asked for a morning slot"
+              />
+            </div>
+
+            {error && (
+              <div className={styles.bannerBad}>
+                <TriangleAlert size={16} />
+                <span>{error}</span>
+              </div>
+            )}
+
+            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 10 }}>
+              <button className="clay-btn clay-btn-ghost" onClick={onCancel} disabled={busy}>
+                Cancel
+              </button>
+              <button className="clay-btn clay-btn-primary" onClick={submit} disabled={busy}>
+                {busy ? (
+                  <>
+                    <Loader2 size={16} className={styles.spin} /> Booking…
+                  </>
                 ) : (
-                  <div style={{ color: 'var(--text-muted)', fontStyle: 'italic' }}>Capturing GPS location...</div>
+                  'Book and assign'
                 )}
-              </div>
+              </button>
+            </div>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
 
-              {/* On-Site Photo Evidence Upload */}
-              <div className="clay-input-group">
-                <label className="clay-label">Capture / Upload On-Site Inspection Photos</label>
-                <div style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
-                  <label className="clay-btn clay-btn-secondary clay-btn-sm" style={{ cursor: 'pointer' }}>
-                    <Camera size={16} /> Choose Photo
-                    <input type="file" accept="image/*" capture="environment" multiple onChange={handleAddSamplePhoto} style={{ display: 'none' }} />
-                  </label>
-                  <span style={{ fontSize: '0.8rem', color: 'var(--text-secondary)' }}>
-                    {photoUrls.length} photo(s) attached
-                  </span>
+/* ------------------------------------------------------------------ *
+ * Inspection
+ * ------------------------------------------------------------------ */
+
+function InspectionForm({
+  task,
+  onCancel,
+  onDone,
+  onError,
+}: {
+  task: QueueTask;
+  onCancel: () => void;
+  onDone: (message: string) => void;
+  onError: (text: string) => void;
+}) {
+  const [template, setTemplate] = useState<InspectionTemplate | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  const [observed, setObserved] = useState<Record<number, string>>({});
+  const [checks, setChecks] = useState<Record<string, 'PASS' | 'FAIL' | 'NA'>>({});
+  const [standards, setStandards] = useState<{ name: string; identifier: string; validUntil: string }[]>([
+    { name: '', identifier: '', validUntil: '' },
+  ]);
+  const [evidence, setEvidence] = useState<UploadedEvidence[]>([]);
+  const [uploading, setUploading] = useState(false);
+  const [gps, setGps] = useState<{ lat: number; lng: number; accuracyMetres?: number } | null>(null);
+  const [gpsError, setGpsError] = useState<string | null>(null);
+  const [capturingGps, setCapturingGps] = useState(false);
+  const [remarks, setRemarks] = useState('');
+  const [correctionReason, setCorrectionReason] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [outcome, setOutcome] = useState<{
+    inspectionNo: string;
+    result: string;
+    note: string;
+    sealNo?: string;
+    gpsDriftMetres?: number;
+    outOfTolerance: string[];
+    failedChecks: { code: string; label: string }[];
+  } | null>(null);
+
+  const isCorrection = Boolean(task.inspection?.isSubmitted);
+
+  /* GPS: a refusal is reported as a refusal. The old page substituted Delhi's
+   * coordinates when the device said no, which put a false location on the
+   * evidence record for an inspection that may have happened anywhere. */
+  const captureGps = useCallback(() => {
+    if (!('geolocation' in navigator)) {
+      setGpsError('This device cannot provide a location. Record the inspection from a device that can.');
+      return;
+    }
+    setCapturingGps(true);
+    setGpsError(null);
+    navigator.geolocation.getCurrentPosition(
+      (pos) => {
+        setGps({
+          lat: pos.coords.latitude,
+          lng: pos.coords.longitude,
+          accuracyMetres: Number.isFinite(pos.coords.accuracy) ? Math.round(pos.coords.accuracy) : undefined,
+        });
+        setCapturingGps(false);
+      },
+      (err) => {
+        setGps(null);
+        setGpsError(
+          err.code === err.PERMISSION_DENIED
+            ? 'Location permission was refused. The inspection location cannot be recorded without it.'
+            : `The location could not be read (${err.message}). Move to open sky and try again.`
+        );
+        setCapturingGps(false);
+      },
+      { enableHighAccuracy: true, timeout: 15_000, maximumAge: 0 }
+    );
+  }, []);
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const res = await fetch(`/api/inspections?templateFor=${task._id}`);
+        const data = await res.json();
+        if (cancelled) return;
+        if (!res.ok || !data.success) {
+          setError(data.error ?? 'The test-point table could not be loaded.');
+          return;
+        }
+        setTemplate(data);
+        setChecks(
+          Object.fromEntries(
+            (data.conformityChecks ?? []).map((c: { code: string }) => [c.code, 'NA' as const])
+          )
+        );
+        // Asked for as soon as we know the rule requires it, so the inspector deals
+        // with the permission prompt while reading the form rather than at submit.
+        if (data.requirements?.requireGpsEvidence) captureGps();
+      } catch {
+        if (!cancelled) setError('The test-point table could not be reached.');
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [task._id, captureGps]);
+
+  const uploadEvidence = async (e: ChangeEvent<HTMLInputElement>) => {
+    const files = Array.from(e.target.files ?? []);
+    e.target.value = '';
+    if (files.length === 0) return;
+
+    setUploading(true);
+    setError(null);
+
+    for (const file of files) {
+      if (file.size > MAX_UPLOAD_BYTES) {
+        setError(`${file.name} is larger than ${Math.round(MAX_UPLOAD_BYTES / 1024 / 1024)} MB and was not uploaded.`);
+        continue;
+      }
+      const form = new FormData();
+      form.set('file', file);
+      form.set('documentType', 'INSPECTION_EVIDENCE');
+      form.set('applicationId', task._id);
+      if (task.instrumentId?._id) form.set('instrumentId', task.instrumentId._id);
+      form.set('capturedAt', new Date().toISOString());
+      if (gps) {
+        form.set('lat', String(gps.lat));
+        form.set('lng', String(gps.lng));
+        if (gps.accuracyMetres != null) form.set('accuracyMetres', String(gps.accuracyMetres));
+      }
+
+      try {
+        const res = await fetch('/api/documents', { method: 'POST', body: form });
+        const data = await res.json();
+        if (!res.ok || !data.success) {
+          setError(data.error ?? `${file.name} could not be stored.`);
+          continue;
+        }
+        setEvidence((prev) => [...prev, data.document]);
+      } catch {
+        setError(`${file.name} could not be uploaded.`);
+      }
+    }
+
+    setUploading(false);
+  };
+
+  const submit = async (submitFinal: boolean) => {
+    if (!template) return;
+
+    if (submitFinal) {
+      const missing = template.readings.findIndex((_, i) => !observed[i]?.trim());
+      if (missing !== -1) {
+        setError(`Enter what the instrument showed at ${template.readings[missing].label}.`);
+        return;
+      }
+      if (evidence.length < template.requirements.minEvidencePhotos) {
+        setError(
+          `${template.requirements.minEvidencePhotos} photographs are required; ${evidence.length} attached.`
+        );
+        return;
+      }
+      if (template.requirements.requireGpsEvidence && !gps) {
+        setError('This verification requires the inspection location. Capture it before submitting.');
+        return;
+      }
+      if (isCorrection && correctionReason.trim().length < 10) {
+        setError('A correction must say what was wrong with the previous report.');
+        return;
+      }
+    }
+
+    setBusy(true);
+    setError(null);
+    try {
+      const res = await fetch('/api/inspections', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          applicationId: task._id,
+          submit: submitFinal,
+          readings: template.readings.map((r, i) => ({
+            label: r.label,
+            reference: r.reference,
+            observed: observed[i]?.trim() === '' ? undefined : Number(observed[i]),
+            unit: r.unit,
+            maxErrorPercent: r.maxErrorPercent,
+          })),
+          conformityChecks: template.conformityChecks.map((c) => ({
+            code: c.code,
+            label: c.label,
+            result: checks[c.code] ?? 'NA',
+          })),
+          referenceStandards: standards
+            .filter((s) => s.name.trim())
+            .map((s) => ({
+              name: s.name.trim(),
+              identifier: s.identifier.trim() || undefined,
+              calibrationValidUntil: s.validUntil || undefined,
+            })),
+          evidenceIds: evidence.map((d) => d.id),
+          location: { gps: gps ?? undefined },
+          remarks: remarks.trim() || undefined,
+          ...(isCorrection
+            ? { supersedesId: task.inspection?._id, correctionReason: correctionReason.trim() }
+            : {}),
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok || !data.success) {
+        setError(data.error ?? 'The report could not be filed.');
+        return;
+      }
+
+      if (!submitFinal) {
+        onDone(`Draft saved for ${task.applicationNo}. Submit it when the visit is complete.`);
+        return;
+      }
+
+      setOutcome({
+        inspectionNo: data.inspection.inspectionNo,
+        result: data.inspection.result,
+        note: data.evaluation.note,
+        sealNo: data.inspection.sealNo,
+        gpsDriftMetres: data.inspection.gpsDriftMetres,
+        outOfTolerance: data.evaluation.outOfTolerance ?? [],
+        failedChecks: data.evaluation.failedChecks ?? [],
+      });
+    } catch {
+      onError('The report could not be sent. Check your connection and try again.');
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  /* Shown live so the inspector sees the tolerance being applied as they type —
+   * but the verdict that counts is the server's, computed from the same rule. */
+  const errorFor = (i: number, reference: number) => {
+    const value = Number(observed[i]);
+    if (!observed[i]?.trim() || !Number.isFinite(value) || reference === 0) return null;
+    return ((value - reference) / reference) * 100;
+  };
+
+  return (
+    <div className="clay-modal-overlay">
+      <div className="clay-modal" style={{ maxWidth: 760, maxHeight: '92vh', overflowY: 'auto' }}>
+        <div className="clay-modal-header">
+          <div>
+            <h3 className="clay-modal-title">
+              {isCorrection ? 'Corrected inspection report' : 'Field inspection report'}
+            </h3>
+            <p style={{ fontSize: '0.82rem', color: 'var(--text-secondary)', margin: '2px 0 0' }}>
+              {task.applicationNo} · {task.instrumentId?.type}, serial {task.instrumentId?.serialNo}
+            </p>
+          </div>
+          <button className="clay-btn clay-btn-sm clay-btn-ghost" onClick={onCancel}>
+            ✕
+          </button>
+        </div>
+
+        {loading ? (
+          <div className={styles.loadingWrap}>
+            <Loader2 size={28} className={styles.spin} />
+            <p>Loading the test-point table for this instrument…</p>
+          </div>
+        ) : outcome ? (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+            <div
+              className={
+                outcome.result === 'PASS'
+                  ? styles.bannerOk
+                  : outcome.result === 'FAIL'
+                    ? styles.bannerBad
+                    : styles.bannerWarn
+              }
+            >
+              {outcome.result === 'PASS' ? <CheckCircle size={18} /> : <TriangleAlert size={18} />}
+              <span>
+                <strong>{outcome.result}</strong> — {outcome.inspectionNo}
+              </span>
+            </div>
+
+            <p className={styles.note}>{outcome.note}</p>
+
+            <section className={styles.modalInfoBox}>
+              <h4>How this was decided</h4>
+              <p className={styles.note}>
+                The result was computed from the rule&apos;s permissible error limits, not entered by hand.
+              </p>
+              {outcome.outOfTolerance.length > 0 && (
+                <div>Outside tolerance: {outcome.outOfTolerance.join(', ')}</div>
+              )}
+              {outcome.failedChecks.length > 0 && (
+                <div>Failed checks: {outcome.failedChecks.map((c) => c.label).join(', ')}</div>
+              )}
+              {outcome.sealNo && (
+                <div>
+                  Seal number <strong style={{ fontFamily: 'var(--font-mono, monospace)' }}>{outcome.sealNo}</strong>{' '}
+                  — issued by the department&apos;s own sequence.
                 </div>
+              )}
+              {outcome.gpsDriftMetres != null && (
+                <div>Captured {outcome.gpsDriftMetres} m from the registered installation.</div>
+              )}
+            </section>
 
-                {photoUrls.length > 0 && (
-                  <div style={{ display: 'flex', gap: 8, marginTop: 8, overflowX: 'auto', paddingBottom: 4 }}>
-                    {photoUrls.map((url, idx) => (
-                      <div key={idx} style={{ position: 'relative', width: 70, height: 70, borderRadius: 6, overflow: 'hidden', border: '1px solid var(--clay-border)' }}>
-                        <img src={url} alt="On-site evidence" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
-                        <button
-                          type="button"
-                          onClick={() => setPhotoUrls((prev) => prev.filter((_, i) => i !== idx))}
-                          style={{ position: 'absolute', top: 2, right: 2, background: 'rgba(0,0,0,0.7)', color: 'white', border: 'none', borderRadius: '50%', width: 18, height: 18, fontSize: '0.7rem', cursor: 'pointer' }}
-                        >
-                          ✕
-                        </button>
-                      </div>
-                    ))}
-                  </div>
-                )}
+            <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
+              <button
+                className="clay-btn clay-btn-primary"
+                onClick={() =>
+                  onDone(
+                    `${outcome.inspectionNo} filed for ${task.applicationNo}: ${outcome.result}. It is now with the deciding officer.`
+                  )
+                }
+              >
+                Done
+              </button>
+            </div>
+          </div>
+        ) : !template ? (
+          <div className={styles.bannerBad}>
+            <TriangleAlert size={17} />
+            <span>{error ?? 'The test-point table is unavailable.'}</span>
+          </div>
+        ) : (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+            <section className={styles.modalInfoBox}>
+              <h4>Applied rule</h4>
+              <div>
+                {template.appliedRule.name} ({template.appliedRule.matchedScope})
               </div>
+              <div>
+                {template.requirements.minEvidencePhotos} photograph(s) required ·{' '}
+                {template.requirements.requireGpsEvidence ? 'location mandatory' : 'location optional'} · drift
+                tolerance {template.requirements.gpsToleranceMetres} m
+              </div>
+              {template.requirements.legalReference && (
+                <div className={styles.note}>{template.requirements.legalReference}</div>
+              )}
+            </section>
 
-              {/* Remarks */}
+            {isCorrection && (
               <div className="clay-input-group">
-                <label className="clay-label">Inspector Findings & Remarks</label>
+                <label className="clay-label">
+                  What was wrong with {task.inspection?.inspectionNo}?
+                </label>
                 <textarea
                   className="clay-input"
                   rows={2}
-                  value={remarks}
-                  onChange={(e) => setRemarks(e.target.value)}
-                  placeholder="Enter official notes (e.g. Standard verified, lead seal placed)..."
+                  value={correctionReason}
+                  onChange={(e) => setCorrectionReason(e.target.value)}
+                  placeholder="The earlier version stays on the record beside this one, with your reason."
                 />
               </div>
+            )}
 
-              {/* Actions */}
-              <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 10, marginTop: 8 }}>
-                <button
-                  type="button"
-                  className="clay-btn clay-btn-ghost"
-                  onClick={() => setSelectedTask(null)}
-                >
-                  Cancel
-                </button>
-                <button
-                  type="button"
-                  className="clay-btn clay-btn-primary"
-                  onClick={handleStampSubmit}
-                  disabled={submitting}
-                >
-                  {submitting ? (
-                    <>
-                      <Loader2 size={16} className={styles.spin} /> Submitting Sign-off...
-                    </>
-                  ) : (
-                    'Complete Inspection & Save'
-                  )}
-                </button>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Full Specs Modal */}
-      {detailTask && (
-        <div className="clay-modal-overlay">
-          <div className="clay-modal" style={{ maxWidth: 600, maxHeight: '90vh', overflowY: 'auto' }}>
-            <div className="clay-modal-header">
-              <h3 className="clay-modal-title">Application & Instrument Full Specifications</h3>
-              <button className="clay-btn clay-btn-sm clay-btn-ghost" onClick={() => setDetailTask(null)}>
-                ✕
-              </button>
-            </div>
-
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
-              {/* Owner Info */}
-              <div style={{ background: 'var(--surface-warm)', padding: 14, borderRadius: 'var(--radius-md)' }}>
-                <h4 style={{ fontSize: '0.95rem', marginBottom: 8, display: 'flex', alignItems: 'center', gap: 6, color: 'var(--color-primary)' }}>
-                  <User size={16} /> Owner & Business Profile
-                </h4>
-                <div style={{ fontSize: '0.85rem', display: 'flex', flexDirection: 'column', gap: 4 }}>
-                  <div><strong>Name:</strong> {detailTask.ownerId?.name}</div>
-                  <div><strong>Email:</strong> {detailTask.ownerId?.email}</div>
-                  <div><strong>Phone:</strong> {detailTask.ownerId?.phone || 'N/A'}</div>
-                  <div><strong>Organization:</strong> {detailTask.ownerId?.organizationName || 'Private Trader'}</div>
-                </div>
-              </div>
-
-              {/* Instrument Info */}
-              <div style={{ background: 'var(--surface-warm)', padding: 14, borderRadius: 'var(--radius-md)' }}>
-                <h4 style={{ fontSize: '0.95rem', marginBottom: 8, display: 'flex', alignItems: 'center', gap: 6, color: 'var(--color-secondary)' }}>
-                  <Scale size={16} /> Instrument Specifications
-                </h4>
-                <div style={{ fontSize: '0.85rem', display: 'flex', flexDirection: 'column', gap: 4 }}>
-                  <div><strong>Category/Type:</strong> {detailTask.instrumentId?.type}</div>
-                  <div><strong>Brand & Model:</strong> {detailTask.instrumentId?.brand} — {detailTask.instrumentId?.model}</div>
-                  <div><strong>Serial Number:</strong> {detailTask.instrumentId?.serialNo}</div>
-                  <div><strong>Capacity:</strong> {detailTask.instrumentId?.capacity || 'Standard'}</div>
-                  <div><strong>Location:</strong> {detailTask.instrumentId?.address}, {detailTask.instrumentId?.installationDistrict}, {detailTask.instrumentId?.installationState}</div>
-                </div>
-
-                {/* Uploaded Photos Grid */}
-                {(detailTask.instrumentId?.photos?.length || 0) > 0 && (
-                  <div style={{ marginTop: 12 }}>
-                    <div style={{ fontSize: '0.82rem', fontWeight: 600, marginBottom: 6 }}>Registered Instrument Photos:</div>
-                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(80px, 1fr))', gap: 8 }}>
-                      {detailTask.instrumentId?.photos?.map((pUrl, idx) => (
-                        <div
-                          key={idx}
-                          onClick={() => setPreviewPhoto(pUrl)}
-                          style={{ height: 75, borderRadius: 6, overflow: 'hidden', border: '1px solid var(--clay-border)', cursor: 'pointer' }}
-                        >
-                          <img src={pUrl} alt="Instrument" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                )}
-              </div>
-
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                {detailTask.status === 'Approved' ? (
-                  <button
-                    className="clay-btn clay-btn-primary clay-btn-sm"
-                    onClick={() => {
-                      const t = detailTask;
-                      setDetailTask(null);
-                      openCertModalForTask(t);
-                    }}
-                  >
-                    <Download size={14} /> Download Certificate PDF
-                  </button>
-                ) : (
-                  <div />
-                )}
-                <button className="clay-btn clay-btn-ghost" onClick={() => setDetailTask(null)}>
-                  Close
-                </button>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Photo Full-Size Preview Modal */}
-      {previewPhoto && (
-        <div className="clay-modal-overlay" onClick={() => setPreviewPhoto(null)}>
-          <div className="clay-modal" style={{ maxWidth: 700, padding: 12, textAlign: 'center' }} onClick={(e) => e.stopPropagation()}>
-            <img src={previewPhoto} alt="Full Instrument Photo" style={{ maxWidth: '100%', maxHeight: '75vh', borderRadius: 'var(--radius-md)', objectFit: 'contain' }} />
-            <div style={{ marginTop: 12, display: 'flex', justifyContent: 'flex-end' }}>
-              <button className="clay-btn clay-btn-secondary" onClick={() => setPreviewPhoto(null)}>
-                Close Preview
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Printable Certificate PDF Modal */}
-      {selectedCertPdf && (
-        <div className="clay-modal-overlay">
-          <div className="clay-modal" style={{ maxWidth: 740, maxHeight: '92vh', overflowY: 'auto', padding: 24 }}>
-            {/* Action Bar */}
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16, borderBottom: '1px solid var(--clay-border)', paddingBottom: 12 }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                <FileCheck size={22} style={{ color: 'var(--color-primary)' }} />
-                <h3 style={{ margin: 0, fontSize: '1.1rem', fontWeight: 800 }}>Official Verification Certificate</h3>
-              </div>
-              <div style={{ display: 'flex', gap: 8 }}>
-                <button
-                  className="clay-btn clay-btn-secondary clay-btn-sm"
-                  onClick={handlePrintPdf}
-                >
-                  <Printer size={15} />
-                  Print / Save PDF
-                </button>
-                <button
-                  className="clay-btn clay-btn-ghost clay-btn-sm"
-                  onClick={() => setSelectedCertPdf(null)}
-                >
-                  ✕ Close
-                </button>
-              </div>
-            </div>
-
-            {/* Certificate Document Body */}
-            <div
-              id="printable-certificate"
-              style={{
-                background: '#fff',
-                color: '#1a1a24',
-                padding: '36px 40px',
-                borderRadius: 12,
-                border: '4px double #d4af37',
-                fontFamily: 'serif',
-                boxShadow: '0 8px 30px rgba(0,0,0,0.1)',
-                position: 'relative',
-              }}
-            >
-              {/* Decorative Corner Seals */}
-              <div style={{ position: 'absolute', top: 12, left: 16, fontSize: '0.75rem', fontWeight: 700, color: '#8b0000', letterSpacing: 1 }}>
-                FORM VIII — RULE 11(1)
-              </div>
-              <div style={{ position: 'absolute', top: 12, right: 16, fontSize: '0.75rem', fontWeight: 700, color: '#8b0000', letterSpacing: 1 }}>
-                SEC. 24, ACT 2009
-              </div>
-
-              {/* Header */}
-              <div style={{ textAlign: 'center', marginBottom: 24 }}>
-                <div style={{ fontSize: '1.25rem', fontWeight: 900, textTransform: 'uppercase', letterSpacing: 1.5, color: '#2b2d42' }}>
-                  DEPARTMENT OF LEGAL METROLOGY
-                </div>
-                <div style={{ fontSize: '0.95rem', fontWeight: 600, color: '#4a4e69', marginTop: 2 }}>
-                  GOVERNMENT OF INDIA / STATE ENFORCEMENT
-                </div>
-                <div style={{ fontSize: '1.35rem', fontWeight: 800, color: '#b71c1c', marginTop: 12, textTransform: 'uppercase', textDecoration: 'underline' }}>
-                  CERTIFICATE OF VERIFICATION
-                </div>
-                <div style={{ fontSize: '0.85rem', color: '#555', marginTop: 4 }}>
-                  Certificate Number: <strong style={{ fontFamily: 'monospace', fontSize: '1rem', color: '#000' }}>{selectedCertPdf.certNo}</strong>
-                </div>
-              </div>
-
-              {/* Watermark / Background Emblem */}
-              <div style={{ borderTop: '2px solid #d4af37', borderBottom: '2px solid #d4af37', padding: '20px 0', margin: '20px 0' }}>
-                <p style={{ fontSize: '0.95rem', lineHeight: 1.7, margin: 0, textAlign: 'justify' }}>
-                  This is to certify that the measuring/weighing instrument described below belonging to{' '}
-                  <strong style={{ textDecoration: 'underline' }}>{selectedCertPdf.ownerSnapshot?.name || 'Trader'}</strong> ({selectedCertPdf.ownerSnapshot?.email}), has been officially inspected, tested, and calibrated in accordance with the <strong>Legal Metrology (General) Rules, 2011</strong> and Section 24 of the Legal Metrology Act, 2009.
-                </p>
-              </div>
-
-              {/* Specs Table */}
-              <table style={{ width: '100%', borderCollapse: 'collapse', marginBottom: 24, fontSize: '0.9rem' }}>
+            <section>
+              <h4 style={{ fontSize: '0.9rem', marginBottom: 6 }}>Test points</h4>
+              <p className={styles.note}>
+                Enter what the instrument displayed at each reference load. The error and the verdict are computed —
+                you do not choose pass or fail.
+              </p>
+              <table className={styles.readingTable}>
+                <thead>
+                  <tr>
+                    <th>Test point</th>
+                    <th>Reference</th>
+                    <th>Observed</th>
+                    <th>Error</th>
+                    <th>Limit</th>
+                  </tr>
+                </thead>
                 <tbody>
-                  <tr style={{ background: '#f8f9fa' }}>
-                    <td style={{ padding: '8px 12px', border: '1px solid #ddd', fontWeight: 700, width: '40%' }}>Instrument Type / Category</td>
-                    <td style={{ padding: '8px 12px', border: '1px solid #ddd' }}>{selectedCertPdf.instrumentSnapshot?.type}</td>
-                  </tr>
-                  <tr>
-                    <td style={{ padding: '8px 12px', border: '1px solid #ddd', fontWeight: 700 }}>Brand & Model</td>
-                    <td style={{ padding: '8px 12px', border: '1px solid #ddd' }}>{selectedCertPdf.instrumentSnapshot?.brand} — {selectedCertPdf.instrumentSnapshot?.model}</td>
-                  </tr>
-                  <tr style={{ background: '#f8f9fa' }}>
-                    <td style={{ padding: '8px 12px', border: '1px solid #ddd', fontWeight: 700 }}>Serial Number</td>
-                    <td style={{ padding: '8px 12px', border: '1px solid #ddd', fontFamily: 'monospace', fontWeight: 700 }}>{selectedCertPdf.instrumentSnapshot?.serialNo}</td>
-                  </tr>
-                  <tr>
-                    <td style={{ padding: '8px 12px', border: '1px solid #ddd', fontWeight: 700 }}>Maximum Capacity</td>
-                    <td style={{ padding: '8px 12px', border: '1px solid #ddd' }}>{selectedCertPdf.instrumentSnapshot?.capacity || 'Standard Limit'}</td>
-                  </tr>
-                  <tr style={{ background: '#f8f9fa' }}>
-                    <td style={{ padding: '8px 12px', border: '1px solid #ddd', fontWeight: 700 }}>Date of Verification</td>
-                    <td style={{ padding: '8px 12px', border: '1px solid #ddd', fontWeight: 600 }}>{formatDate(selectedCertPdf.issuedDate)}</td>
-                  </tr>
-                  <tr>
-                    <td style={{ padding: '8px 12px', border: '1px solid #ddd', fontWeight: 700, color: '#b71c1c' }}>Certificate Expiry Date</td>
-                    <td style={{ padding: '8px 12px', border: '1px solid #ddd', fontWeight: 700, color: '#b71c1c' }}>{formatDate(selectedCertPdf.expiryDate)}</td>
-                  </tr>
+                  {template.readings.map((r, i) => {
+                    const err = errorFor(i, r.reference);
+                    const over = err !== null && Math.abs(err) > r.maxErrorPercent;
+                    return (
+                      <tr key={r.label} className={over ? styles.rowFail : undefined}>
+                        <td>{r.label}</td>
+                        <td>
+                          {r.reference} {r.unit}
+                        </td>
+                        <td>
+                          <input
+                            type="number"
+                            step="any"
+                            className={`clay-input ${styles.readingInput}`}
+                            value={observed[i] ?? ''}
+                            onChange={(e) => setObserved((prev) => ({ ...prev, [i]: e.target.value }))}
+                            placeholder="—"
+                            aria-label={`Observed value at ${r.label}`}
+                          />
+                        </td>
+                        <td>{err === null ? '—' : `${err.toFixed(3)}%`}</td>
+                        <td>±{r.maxErrorPercent}%</td>
+                      </tr>
+                    );
+                  })}
                 </tbody>
               </table>
+            </section>
 
-              {/* QR Code & Signatures Row */}
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end', marginTop: 30 }}>
-                {/* QR Verification Code */}
-                <div style={{ textAlign: 'center' }}>
-                  <img
-                    src={`https://api.qrserver.com/v1/create-qr-code/?size=110x110&data=${encodeURIComponent(
-                      typeof window !== 'undefined'
-                        ? `${window.location.origin}/verify?certNo=${selectedCertPdf.certNo}`
-                        : `https://vtula.gov.in/verify?certNo=${selectedCertPdf.certNo}`
-                    )}`}
-                    alt="QR Verification"
-                    style={{ width: 100, height: 100, border: '1px solid #ccc', padding: 4, background: '#fff' }}
+            <section>
+              <h4 style={{ fontSize: '0.9rem', marginBottom: 6 }}>Conformity checks</h4>
+              {template.conformityChecks.map((c) => (
+                <div key={c.code} className={styles.checkRow}>
+                  <span>{c.label}</span>
+                  <div className={styles.checkButtons}>
+                    {(['PASS', 'FAIL', 'NA'] as const).map((v) => (
+                      <button
+                        key={v}
+                        type="button"
+                        className={`clay-btn clay-btn-sm ${
+                          checks[c.code] === v ? (v === 'FAIL' ? 'clay-btn-secondary' : 'clay-btn-primary') : 'clay-btn-ghost'
+                        }`}
+                        onClick={() => setChecks((prev) => ({ ...prev, [c.code]: v }))}
+                      >
+                        {v === 'NA' ? 'N/A' : v}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              ))}
+            </section>
+
+            <section className={styles.modalInfoBox}>
+              <h4>
+                <Crosshair size={15} /> Inspection location
+              </h4>
+              {gps ? (
+                <div style={{ fontFamily: 'var(--font-mono, monospace)' }}>
+                  {gps.lat.toFixed(6)}, {gps.lng.toFixed(6)}
+                  {gps.accuracyMetres != null ? ` (±${gps.accuracyMetres} m)` : ''}
+                </div>
+              ) : (
+                <div className={styles.note}>{gpsError ?? 'Not captured yet.'}</div>
+              )}
+              {template.instrument.registeredGps && (
+                <div className={styles.note}>
+                  Registered site: {template.instrument.registeredGps.lat.toFixed(6)},{' '}
+                  {template.instrument.registeredGps.lng.toFixed(6)}. Any difference is measured and recorded, not
+                  judged — a relocated instrument is a transfer to file, not a failure.
+                </div>
+              )}
+              <button
+                type="button"
+                className="clay-btn clay-btn-ghost clay-btn-sm"
+                onClick={captureGps}
+                disabled={capturingGps}
+                style={{ alignSelf: 'flex-start', marginTop: 6 }}
+              >
+                {capturingGps ? (
+                  <>
+                    <Loader2 size={14} className={styles.spin} /> Reading location…
+                  </>
+                ) : (
+                  <>
+                    <Crosshair size={14} /> {gps ? 'Re-capture' : 'Capture location'}
+                  </>
+                )}
+              </button>
+            </section>
+
+            <section>
+              <h4 style={{ fontSize: '0.9rem', marginBottom: 6 }}>
+                Evidence photographs ({evidence.length}/{template.requirements.minEvidencePhotos} required)
+              </h4>
+              <p className={styles.note}>
+                Each file is stored with a SHA-256 fingerprint, so it can be shown later to be the same image.
+              </p>
+              <label className="clay-btn clay-btn-secondary clay-btn-sm" style={{ cursor: 'pointer' }}>
+                {uploading ? <Loader2 size={16} className={styles.spin} /> : <Camera size={16} />}
+                {uploading ? 'Uploading…' : 'Add photographs'}
+                <input
+                  type="file"
+                  accept="image/jpeg,image/png,image/webp"
+                  capture="environment"
+                  multiple
+                  onChange={uploadEvidence}
+                  style={{ display: 'none' }}
+                  disabled={uploading}
+                />
+              </label>
+
+              {evidence.length > 0 && (
+                <ul className={styles.evidenceList}>
+                  {evidence.map((d) => (
+                    <li key={d.id}>
+                      <Paperclip size={13} />
+                      <a href={d.href} target="_blank" rel="noreferrer">
+                        {d.fileName}
+                      </a>
+                      <code>{d.sha256.slice(0, 10)}…</code>
+                      <button
+                        type="button"
+                        onClick={() => setEvidence((prev) => prev.filter((x) => x.id !== d.id))}
+                        aria-label={`Remove ${d.fileName} from this report`}
+                      >
+                        <Trash2 size={13} />
+                      </button>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </section>
+
+            <section>
+              <h4 style={{ fontSize: '0.9rem', marginBottom: 6 }}>Reference standards used</h4>
+              {standards.map((s, i) => (
+                <div key={i} className={styles.standardRow}>
+                  <input
+                    className="clay-input"
+                    placeholder="e.g. F1 class 20 kg test weight"
+                    value={s.name}
+                    onChange={(e) =>
+                      setStandards((prev) => prev.map((x, j) => (j === i ? { ...x, name: e.target.value } : x)))
+                    }
                   />
-                  <div style={{ fontSize: '0.7rem', color: '#666', marginTop: 4 }}>Scan to Verify Authenticity</div>
+                  <input
+                    className="clay-input"
+                    placeholder="Identifier"
+                    value={s.identifier}
+                    onChange={(e) =>
+                      setStandards((prev) => prev.map((x, j) => (j === i ? { ...x, identifier: e.target.value } : x)))
+                    }
+                  />
+                  <input
+                    type="date"
+                    className="clay-input"
+                    value={s.validUntil}
+                    onChange={(e) =>
+                      setStandards((prev) => prev.map((x, j) => (j === i ? { ...x, validUntil: e.target.value } : x)))
+                    }
+                  />
                 </div>
+              ))}
+              <button
+                type="button"
+                className="clay-btn clay-btn-ghost clay-btn-sm"
+                onClick={() => setStandards((prev) => [...prev, { name: '', identifier: '', validUntil: '' }])}
+              >
+                Add another standard
+              </button>
+            </section>
 
-                {/* Verification Stamp & Signature */}
-                <div style={{ textAlign: 'right', display: 'flex', flexDirection: 'column', alignItems: 'flex-end' }}>
-                  <div style={{ border: '2px dashed #2b2d42', padding: '6px 14px', borderRadius: 6, marginBottom: 12, background: 'rgba(43, 45, 66, 0.04)', textAlign: 'center' }}>
-                    <div style={{ fontSize: '0.75rem', fontWeight: 800, color: '#1b5e20' }}>SEAL AFFIXED & STAMPED</div>
-                    <div style={{ fontSize: '0.7rem', fontFamily: 'monospace' }}>LMO-SEAL-VERIFIED</div>
-                  </div>
-                  <div style={{ fontWeight: 800, fontSize: '0.9rem', color: '#1a1a24' }}>Legal Metrology Officer (LMO)</div>
-                  <div style={{ fontSize: '0.78rem', color: '#555' }}>Inspectorate of Legal Metrology</div>
-                  <div style={{ fontSize: '0.65rem', fontFamily: 'monospace', color: '#888', marginTop: 4, maxWidth: 240, wordBreak: 'break-all' }}>
-                    HMAC-SHA256: {(selectedCertPdf.digitalSignature || 'HMAC-SIGNED').substring(0, 32)}...
-                  </div>
-                </div>
+            <div className="clay-input-group">
+              <label className="clay-label">Remarks</label>
+              <textarea
+                className="clay-input"
+                rows={2}
+                value={remarks}
+                onChange={(e) => setRemarks(e.target.value)}
+                placeholder="Anything an officer reading this report later would need to know."
+              />
+            </div>
+
+            {error && (
+              <div className={styles.bannerBad}>
+                <TriangleAlert size={16} />
+                <span>{error}</span>
               </div>
+            )}
+
+            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 10, flexWrap: 'wrap' }}>
+              <button className="clay-btn clay-btn-ghost" onClick={onCancel} disabled={busy}>
+                Cancel
+              </button>
+              {!isCorrection && (
+                <button className="clay-btn clay-btn-secondary" onClick={() => void submit(false)} disabled={busy}>
+                  Save draft
+                </button>
+              )}
+              <button className="clay-btn clay-btn-primary" onClick={() => void submit(true)} disabled={busy}>
+                {busy ? (
+                  <>
+                    <Loader2 size={16} className={styles.spin} /> Filing…
+                  </>
+                ) : (
+                  'File the report'
+                )}
+              </button>
             </div>
           </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+/* ------------------------------------------------------------------ *
+ * Certificate issued
+ * ------------------------------------------------------------------ */
+
+/**
+ * Shown after issuance. It reports what the server actually created and links to
+ * the certificate register — it does not render a certificate document, because a
+ * printable certificate assembled in a browser from whatever the page happens to
+ * hold is how the fabricated `LMO-CERT-…` forgeries got printed in the first
+ * place. The QR is the server's own, generated locally by `qrcode`.
+ */
+function CertificateIssued({
+  certificate,
+  onClose,
+}: {
+  certificate: IssuedCertificate;
+  onClose: () => void;
+}) {
+  return (
+    <div className="clay-modal-overlay">
+      <div className="clay-modal" style={{ maxWidth: 480 }}>
+        <div className="clay-modal-header">
+          <h3 className="clay-modal-title">Certificate issued</h3>
+          <button className="clay-btn clay-btn-sm clay-btn-ghost" onClick={onClose}>
+            ✕
+          </button>
         </div>
-      )}
+
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 14, alignItems: 'center', textAlign: 'center' }}>
+          <Award size={38} style={{ color: 'var(--color-primary)' }} />
+          <div>
+            <div style={{ fontFamily: 'var(--font-mono, monospace)', fontSize: '1.15rem', fontWeight: 800 }}>
+              {certificate.certNo}
+            </div>
+            <div style={{ fontSize: '0.85rem', color: 'var(--text-secondary)' }}>
+              Valid until {formatDate(certificate.expiryDate)}
+            </div>
+          </div>
+
+          {/* eslint-disable-next-line @next/next/no-img-element -- a server-generated data URL, not a remote asset */}
+          <img
+            src={certificate.qrDataUrl}
+            alt={`QR code linking to the public verification page for ${certificate.certNo}`}
+            width={180}
+            height={180}
+            style={{ borderRadius: 'var(--radius-md)' }}
+          />
+          <p className={styles.note}>
+            Anyone can scan this to check the certificate against the register — no account needed.
+          </p>
+
+          <div style={{ display: 'flex', gap: 10 }}>
+            <Link href={`/verify/${encodeURIComponent(certificate.certNo)}`} className="clay-btn clay-btn-ghost clay-btn-sm">
+              Open the public page
+            </Link>
+            <Link href="/dashboard/certificates" className="clay-btn clay-btn-primary clay-btn-sm">
+              Certificate register
+            </Link>
+          </div>
+        </div>
+      </div>
     </div>
   );
 }

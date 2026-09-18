@@ -1,167 +1,74 @@
-'use client';
-
-import { useState, useEffect, useRef, Suspense } from 'react';
 import Link from 'next/link';
-import { useSearchParams } from 'next/navigation';
-import {
-  Shield,
-  QrCode,
-  Search,
-  CheckCircle,
-  XCircle,
-  AlertTriangle,
-  Loader2,
-  ArrowLeft,
-  Calendar,
-  User,
-  Scale,
-  Hash,
-  Camera,
-  Upload,
-  X,
-  Zap,
-} from 'lucide-react';
+import { redirect } from 'next/navigation';
+import { cookies } from 'next/headers';
+import type { Metadata } from 'next';
+import { ArrowLeft, QrCode, Shield, ScanLine, Keyboard, Landmark, Megaphone } from 'lucide-react';
+import { extractCertNo } from '@/lib/constants';
+import { DEFAULT_LOCALE, LOCALE_COOKIE, isLocale, translator } from '@/lib/i18n';
+import LanguageSwitcher from '@/components/LanguageSwitcher';
+import CertLookup from './CertLookup';
 import styles from './verify.module.css';
 
-interface CertificateResult {
-  valid: boolean;
-  certNo?: string;
-  instrumentType?: string;
-  instrumentSerial?: string;
-  ownerName?: string;
-  verifiedDate?: string;
-  expiryDate?: string;
-  issuedBy?: string;
-  status?: string;
-}
+/**
+ * Manual entry point for public verification.
+ *
+ * The canonical result URL is `/verify/<certNo>` — that is what a certificate's
+ * QR code encodes, and that is the only place a verdict is rendered. This page
+ * exists for the citizen who cannot scan: the sticker is scratched, the phone has
+ * no camera permission, or they are reading the number off a receipt.
+ *
+ * It also absorbs the old `/verify?certNo=…` shape. That was the *only* verify UI
+ * before this rewrite, so links to it exist in the wild — they are redirected
+ * rather than broken, and rather than left as a second rendering path that could
+ * drift out of step with the one the QR points at.
+ *
+ * The locale is read from the cookie here, server-side, rather than left to
+ * `LocaleProvider` to correct after mount. This page already awaits `searchParams`
+ * and is therefore already dynamic, so the read costs nothing — and this is the
+ * surface where it matters most. Someone standing at a counter checking the scale
+ * their vegetables were just weighed on is both the reader most likely to need
+ * Hindi and the one least likely to wait out a frame of English.
+ */
 
-function VerifyContent() {
-  const searchParams = useSearchParams();
-  const queryCertNo = searchParams.get('certNo');
+export const metadata: Metadata = {
+  title: 'Verify a certificate — VTULA',
+  description:
+    'Check whether a weighing or measuring instrument is legally verified under the Legal Metrology Act, 2009. No account needed.',
+};
 
-  const [certNo, setCertNo] = useState(queryCertNo || '');
-  const [loading, setLoading] = useState(false);
-  const [result, setResult] = useState<CertificateResult | null>(null);
-  const [searched, setSearched] = useState(false);
+/**
+ * The shape of a certificate number, shown so a reader knows what they are looking
+ * for on the sticker.
+ *
+ * Not translated, and not transliterated into Devanagari numerals: this is a string
+ * the reader has to type back character for character, and it is printed on the
+ * sticker in exactly this form.
+ */
+const EXAMPLE_CERT_NO = 'VT-CERT-2026-000123';
 
-  // QR Scanner Modal States
-  const [scannerOpen, setScannerOpen] = useState(false);
-  const [activeTab, setActiveTab] = useState<'camera' | 'upload'>('camera');
-  const [cameraError, setCameraError] = useState('');
-  const videoRef = useRef<HTMLVideoElement>(null);
-  const mediaStreamRef = useRef<MediaStream | null>(null);
+/** The placeholder `verify.landing.typeBody` leaves for the example number. */
+const EXAMPLE_SLOT = '{example}';
 
-  useEffect(() => {
-    if (queryCertNo) {
-      setCertNo(queryCertNo);
-      fetchVerification(queryCertNo);
-    }
-  }, [queryCertNo]);
+export default async function VerifyLandingPage(props: {
+  searchParams: Promise<{ [key: string]: string | string[] | undefined }>;
+}) {
+  const sp = await props.searchParams;
+  const legacy = typeof sp.certNo === 'string' ? sp.certNo : undefined;
 
-  const fetchVerification = async (certNumber: string) => {
-    if (!certNumber.trim()) return;
+  if (legacy) {
+    /*
+     * Parsed with the same function the server uses on the way in, so an old link
+     * carrying a full URL or a lowercased number lands in the same place a fresh
+     * scan would. An unparseable value still goes through — `publicVerify` echoes
+     * back what was searched for, which is how a citizen spots a misread character.
+     */
+    const certNo = extractCertNo(legacy) ?? legacy.trim();
+    redirect(`/verify/${encodeURIComponent(certNo)}?src=manual`);
+  }
 
-    setLoading(true);
-    setSearched(true);
-
-    try {
-      const res = await fetch(`/api/certificates/verify?certNo=${encodeURIComponent(certNumber.trim())}`);
-      const data = await res.json();
-
-      if (data.success && data.certificate) {
-        setResult({
-          valid: true,
-          certNo: data.certificate.certNo,
-          instrumentType: data.certificate.instrumentSnapshot?.type,
-          instrumentSerial: data.certificate.instrumentSnapshot?.serialNo,
-          ownerName: data.certificate.ownerSnapshot?.name,
-          verifiedDate: data.certificate.issuedDate,
-          expiryDate: data.certificate.expiryDate,
-          issuedBy: data.certificate.issuedByRole,
-          status: data.certificate.status,
-        });
-      } else {
-        setResult({ valid: false });
-      }
-    } catch {
-      setResult({ valid: false });
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const handleVerify = (e: React.FormEvent) => {
-    e.preventDefault();
-    fetchVerification(certNo);
-  };
-
-  // Camera QR Scanner handlers
-  const startCamera = async () => {
-    setCameraError('');
-    try {
-      const stream = await navigator.mediaDevices.getUserMedia({
-        video: { facingMode: 'environment' },
-      });
-      mediaStreamRef.current = stream;
-      if (videoRef.current) {
-        videoRef.current.srcObject = stream;
-      }
-    } catch (err) {
-      console.error('Camera access error:', err);
-      setCameraError('Camera access denied or unavailable. You can upload a QR image instead.');
-    }
-  };
-
-  const stopCamera = () => {
-    if (mediaStreamRef.current) {
-      mediaStreamRef.current.getTracks().forEach((t) => t.stop());
-      mediaStreamRef.current = null;
-    }
-  };
-
-  const handleOpenScanner = () => {
-    setScannerOpen(true);
-    setTimeout(() => {
-      startCamera();
-    }, 200);
-  };
-
-  const handleCloseScanner = () => {
-    stopCamera();
-    setScannerOpen(false);
-  };
-
-  // Handle QR Image upload
-  const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (file) {
-      // Extract filename or simulate QR decoding from uploaded image
-      const match = file.name.match(/(CERT-[A-Z0-9-]+|LMO-CERT-[A-Z0-9-]+)/i);
-      const extractedCert = match ? match[0] : 'CERT-2026-A7X9K2';
-      setCertNo(extractedCert);
-      handleCloseScanner();
-      fetchVerification(extractedCert);
-    }
-  };
-
-  const handleSimulateCameraScan = (testCertNo: string) => {
-    setCertNo(testCertNo);
-    handleCloseScanner();
-    fetchVerification(testCertNo);
-  };
-
-  const formatDate = (dateStr?: string) => {
-    if (!dateStr) return 'N/A';
-    return new Date(dateStr).toLocaleDateString('en-IN', {
-      day: '2-digit',
-      month: 'short',
-      year: 'numeric',
-    });
-  };
-
-  const isExpired = result?.expiryDate
-    ? new Date(result.expiryDate) < new Date()
-    : false;
+  const stored = (await cookies()).get(LOCALE_COOKIE)?.value;
+  const locale = isLocale(stored) ? stored : DEFAULT_LOCALE;
+  const t = translator(locale);
 
   return (
     <div className={styles.page}>
@@ -171,261 +78,111 @@ function VerifyContent() {
       </div>
 
       <div className={styles.container}>
-        <Link href="/" className={styles.backLink}>
-          <ArrowLeft size={16} />
-          Back to Home
-        </Link>
+        <div className={styles.topBar}>
+          <Link href="/" className={styles.backLink}>
+            <ArrowLeft size={16} />
+            {t('common.home')}
+          </Link>
+          {/*
+            * The switcher matters more here than anywhere else in the product. Every
+            * other place it appears is behind a sign-in, and this page is reached by
+            * people who have no account and never will.
+            */}
+          <LanguageSwitcher />
+        </div>
 
         <div className={styles.header}>
           <div className={styles.logoIcon}>
             <QrCode size={32} />
           </div>
-          <h1>Verify Certificate Authenticity</h1>
-          <p>
-            Scan a physical certificate QR code using your camera or enter the certificate number to instantly verify its official Legal Metrology authenticity.
-          </p>
+          <h1>{t('verify.landing.title')}</h1>
+          <p>{t('verify.landing.lead')}</p>
         </div>
 
-        {/* Search Form with QR Scanner Trigger Button */}
-        <form onSubmit={handleVerify} className={styles.searchForm}>
-          <div className={styles.searchInput}>
-            <Search size={20} />
-            <input
-              type="text"
-              placeholder="Enter Certificate Number (e.g. CERT-2026-A7X9K2)"
-              value={certNo}
-              onChange={(e) => setCertNo(e.target.value)}
-              required
-            />
-          </div>
+        <CertLookup />
 
-          <div style={{ display: 'flex', gap: 10 }}>
-            <button
-              type="button"
-              className="clay-btn clay-btn-secondary clay-btn-lg"
-              onClick={handleOpenScanner}
-              title="Scan QR Code with Camera"
-            >
-              <Camera size={20} />
-              Scan QR Code
-            </button>
-
-            <button type="submit" className="clay-btn clay-btn-primary clay-btn-lg" disabled={loading}>
-              {loading ? <Loader2 size={18} className={styles.spin} /> : <Search size={18} />}
-              {loading ? 'Verifying...' : 'Verify'}
-            </button>
-          </div>
-        </form>
-
-        {/* Interactive QR Scanner Modal */}
-        {scannerOpen && (
-          <div className="clay-modal-overlay">
-            <div className="clay-modal" style={{ maxWidth: 500, textAlign: 'center' }}>
-              <div className="clay-modal-header">
-                <h3 className="clay-modal-title" style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                  <QrCode size={20} style={{ color: 'var(--color-primary)' }} />
-                  Scan Certificate QR Code
-                </h3>
-                <button className="clay-btn clay-btn-sm clay-btn-ghost" onClick={handleCloseScanner}>
-                  <X size={18} />
-                </button>
+        {/*
+          * Said plainly, because the fastest route for most people is not this page
+          * at all — the QR on the sticker opens the result directly.
+          */}
+        <section className={styles.howCard}>
+          <h2>{t('verify.landing.waysTitle')}</h2>
+          <ol className={styles.howList}>
+            <li>
+              <ScanLine size={17} />
+              <div>
+                <strong>{t('verify.landing.scanTitle')}</strong>
+                <span>{t('verify.landing.scanBody')}</span>
               </div>
-
-              {/* Tabs */}
-              <div className="clay-tabs" style={{ marginBottom: 20 }}>
-                <button
-                  type="button"
-                  className={`clay-tab ${activeTab === 'camera' ? 'active' : ''}`}
-                  onClick={() => {
-                    setActiveTab('camera');
-                    startCamera();
-                  }}
-                >
-                  <Camera size={16} style={{ display: 'inline', marginRight: 6 }} />
-                  Live Camera Scanner
-                </button>
-                <button
-                  type="button"
-                  className={`clay-tab ${activeTab === 'upload' ? 'active' : ''}`}
-                  onClick={() => {
-                    setActiveTab('upload');
-                    stopCamera();
-                  }}
-                >
-                  <Upload size={16} style={{ display: 'inline', marginRight: 6 }} />
-                  Upload QR Image
-                </button>
+            </li>
+            <li>
+              <Keyboard size={17} />
+              <div>
+                <strong>{t('verify.landing.typeTitle')}</strong>
+                {/*
+                  * The example number is a placeholder in the sentence rather than
+                  * part of it, so it can be wrapped in `<code>` — which is how a
+                  * reader tells where the number starts and stops. The raw template is
+                  * split on its own placeholder rather than interpolated, because
+                  * interpolating first would give back a plain string with nowhere to
+                  * put the element. Hindi also places the number earlier in the clause
+                  * than English does, which is why this is one key with a slot and not
+                  * two half-sentences either side of the code.
+                  */}
+                <span>
+                  {t('verify.landing.typeBody')
+                    .split(EXAMPLE_SLOT)
+                    .flatMap((part, i) => [
+                      ...(i > 0 ? [<code key={`eg-${i}`}>{EXAMPLE_CERT_NO}</code>] : []),
+                      part,
+                    ])}
+                </span>
               </div>
+            </li>
+            <li>
+              <Landmark size={17} />
+              <div>
+                <strong>{t('verify.landing.noStickerTitle')}</strong>
+                <span>
+                  {t('verify.landing.noStickerBefore')}{' '}
+                  <Link href="/report" className={styles.inlineLink}>
+                    {t('verify.landing.noStickerLink')}
+                  </Link>{' '}
+                  {t('verify.landing.noStickerAfter')}
+                </span>
+              </div>
+            </li>
+          </ol>
+        </section>
 
-              {activeTab === 'camera' ? (
-                <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 16 }}>
-                  {cameraError ? (
-                    <div style={{ padding: 16, background: 'var(--status-error-bg)', color: 'var(--status-error)', borderRadius: 'var(--radius-md)', fontSize: '0.88rem' }}>
-                      {cameraError}
-                    </div>
-                  ) : (
-                    <div className={styles.cameraBox}>
-                      <video ref={videoRef} autoPlay playsInline muted className={styles.videoPreview} />
-                      <div className={styles.scannerOverlay}>
-                        <div className={styles.scannerTarget} />
-                      </div>
-                    </div>
-                  )}
-
-                  <p style={{ fontSize: '0.84rem', color: 'var(--text-secondary)' }}>
-                    Position the certificate QR code inside the viewfinder window.
-                  </p>
-
-                  {/* Sample test triggers for demonstration */}
-                  <div style={{ marginTop: 10, paddingTop: 14, borderTop: '1px dashed rgba(61, 64, 91, 0.1)', width: '100%' }}>
-                    <span style={{ fontSize: '0.78rem', color: 'var(--text-muted)', display: 'block', marginBottom: 8 }}>
-                      Or test scan with sample certificates:
-                    </span>
-                    <div style={{ display: 'flex', gap: 8, justifyContent: 'center', flexWrap: 'wrap' }}>
-                      <button
-                        type="button"
-                        className="clay-btn clay-btn-sm clay-btn-ghost"
-                        onClick={() => handleSimulateCameraScan('CERT-2026-A7X9K2')}
-                      >
-                        <Zap size={14} /> Scan CERT-2026-A7X9K2
-                      </button>
-                      <button
-                        type="button"
-                        className="clay-btn clay-btn-sm clay-btn-ghost"
-                        onClick={() => handleSimulateCameraScan('LMO-CERT-2026-1000')}
-                      >
-                        <Zap size={14} /> Scan LMO-CERT-2026-1000
-                      </button>
-                    </div>
-                  </div>
-                </div>
-              ) : (
-                <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 16, padding: '20px 0' }}>
-                  <label className={styles.uploadDropzone}>
-                    <Upload size={36} style={{ color: 'var(--color-primary)' }} />
-                    <p style={{ fontWeight: 600, fontSize: '0.95rem' }}>Click or drop QR image file here</p>
-                    <span style={{ fontSize: '0.78rem', color: 'var(--text-muted)' }}>Supports PNG, JPG, WEBP</span>
-                    <input
-                      type="file"
-                      accept="image/*"
-                      onChange={handleFileUpload}
-                      style={{ display: 'none' }}
-                    />
-                  </label>
-                </div>
-              )}
-            </div>
+        {/*
+          * Checking a certificate and complaining about a trader are different
+          * errands, so this sits outside the "three ways to check" list rather than
+          * becoming a fourth item in it. It is placed directly beneath because the
+          * most common moment a person needs it is the moment the lookup above has
+          * just told them the sticker is expired — or there was never one to type.
+          */}
+        <section className={styles.complainCard}>
+          <Megaphone size={20} />
+          <div>
+            <strong>{t('verify.landing.complainTitle')}</strong>
+            <span>
+              {t('verify.landing.complainBefore')}{' '}
+              <Link href="/complaint" className={styles.inlineLink}>
+                {t('verify.landing.complainLink')}
+              </Link>{' '}
+              {t('verify.landing.complainAfter')}
+            </span>
           </div>
-        )}
-
-        {/* Results */}
-        {searched && !loading && result && (
-          <div className={styles.result}>
-            {result.valid ? (
-              <div className={`${styles.resultCard} ${isExpired ? styles.resultExpired : styles.resultValid}`}>
-                <div className={styles.resultIcon}>
-                  {isExpired ? (
-                    <AlertTriangle size={48} />
-                  ) : (
-                    <CheckCircle size={48} />
-                  )}
-                </div>
-
-                <h2>{isExpired ? 'Certificate Expired' : 'Certificate Verified ✓'}</h2>
-                <p className={styles.resultSubtitle}>
-                  {isExpired
-                    ? 'This certificate has expired. The instrument requires re-verification.'
-                    : 'This is an authentic, digitally signed certificate issued by VTULA.'}
-                </p>
-
-                {/* QR Code preview for sharing */}
-                <div style={{ display: 'flex', justifyContent: 'center', margin: '20px 0' }}>
-                  <img
-                    src={`https://api.qrserver.com/v1/create-qr-code/?size=160x160&data=${encodeURIComponent(
-                      typeof window !== 'undefined'
-                        ? `${window.location.origin}/verify?certNo=${result.certNo}`
-                        : `https://vtula.gov.in/verify?certNo=${result.certNo}`
-                    )}`}
-                    alt="Certificate Verification QR Code"
-                    style={{
-                      borderRadius: 16,
-                      padding: 12,
-                      background: 'white',
-                      boxShadow: 'var(--clay-shadow-sm)',
-                    }}
-                  />
-                </div>
-
-                <div className={styles.certDetails}>
-                  <div className={styles.certRow}>
-                    <Hash size={16} />
-                    <span>Certificate No.</span>
-                    <strong>{result.certNo}</strong>
-                  </div>
-                  <div className={styles.certRow}>
-                    <Scale size={16} />
-                    <span>Instrument</span>
-                    <strong>{result.instrumentType} — {result.instrumentSerial}</strong>
-                  </div>
-                  <div className={styles.certRow}>
-                    <User size={16} />
-                    <span>Owner</span>
-                    <strong>{result.ownerName}</strong>
-                  </div>
-                  <div className={styles.certRow}>
-                    <Calendar size={16} />
-                    <span>Verified On</span>
-                    <strong>{formatDate(result.verifiedDate)}</strong>
-                  </div>
-                  <div className={styles.certRow}>
-                    <Calendar size={16} />
-                    <span>Expires On</span>
-                    <strong className={isExpired ? styles.expired : ''}>
-                      {formatDate(result.expiryDate)}
-                    </strong>
-                  </div>
-                  <div className={styles.certRow}>
-                    <Shield size={16} />
-                    <span>Issued By</span>
-                    <strong>{result.issuedBy}</strong>
-                  </div>
-                </div>
-
-                <div className={styles.certBadge}>
-                  <span className={`clay-badge ${isExpired ? 'clay-badge-warning' : 'clay-badge-success'}`}>
-                    {isExpired ? 'EXPIRED' : result.status?.toUpperCase()}
-                  </span>
-                </div>
-              </div>
-            ) : (
-              <div className={`${styles.resultCard} ${styles.resultInvalid}`}>
-                <div className={styles.resultIcon}>
-                  <XCircle size={48} />
-                </div>
-                <h2>Certificate Not Found</h2>
-                <p>
-                  No certificate matching &quot;{certNo}&quot; was found in the official registry.
-                </p>
-              </div>
-            )}
-          </div>
-        )}
+        </section>
 
         <div className={styles.footer}>
           <p>
-            <Shield size={14} style={{ verticalAlign: 'middle' }} />{' '}
-            Powered by VTULA — Under Legal Metrology Act 2009
+            <Shield size={14} />
+            {t('verify.footer')}
           </p>
         </div>
       </div>
     </div>
-  );
-}
-
-export default function VerifyPage() {
-  return (
-    <Suspense fallback={<div>Loading verification...</div>}>
-      <VerifyContent />
-    </Suspense>
   );
 }

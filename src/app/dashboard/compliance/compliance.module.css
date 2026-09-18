@@ -1,0 +1,870 @@
+/* ═══════════════════════════════════════════
+   Compliance Health Score — Claymorphism
+
+   Two layouts in one stylesheet because the API serves two documents from one
+   route: a business reading its own score, and an officer reading a roster.
+
+   The grade ramp is the one place this file introduces colour of its own. Four of
+   the five steps could not come from the status tokens: `--status-warning` and
+   `--status-error` are tuned to sit behind their `-bg` pairs as badge fills, and at
+   #F5C869 and #E57373 they fail as *text* on white. A grade is read as text as
+   often as it is read as a fill, so the ramp is defined once as a `--grade` custom
+   property per grade class and consumed as stroke, fill or text colour by whatever
+   needs it. That is also why one class can be dropped on the dial, a chip, a bar
+   and a table cell without five variants of each.
+   ═══════════════════════════════════════════ */
+
+.page {
+  display: flex;
+  flex-direction: column;
+  gap: 22px;
+  animation: global(fadeInUp) 0.4s ease;
+}
+
+.loadingWrap {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 14px;
+  min-height: 55vh;
+  color: var(--text-secondary);
+  font-size: 0.9rem;
+}
+
+.spin {
+  animation: global(claySpin) 0.8s linear infinite;
+}
+
+/* ── Header ── */
+.header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 18px;
+  flex-wrap: wrap;
+}
+
+.header h1 {
+  display: flex;
+  align-items: center;
+  gap: 11px;
+  font-family: var(--font-heading);
+  font-size: 1.7rem;
+  font-weight: 800;
+  color: var(--text-primary);
+}
+
+.header h1 svg {
+  color: var(--color-primary);
+  flex-shrink: 0;
+}
+
+.lead {
+  margin-top: 6px;
+  max-width: 640px;
+  font-size: 0.89rem;
+  line-height: 1.7;
+  color: var(--text-secondary);
+}
+
+.backLink {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  width: fit-content;
+  padding: 0;
+  border: none;
+  background: none;
+  cursor: pointer;
+  font-family: var(--font-heading);
+  font-size: 0.84rem;
+  font-weight: 600;
+  color: var(--text-secondary);
+}
+
+.backLink:hover {
+  color: var(--color-primary);
+}
+
+/* ── The grade ramp ──
+   Green through to red in five readable steps. A and B come from the palette; C, D
+   and E are stated here because the equivalent status tokens are fill colours and
+   are too light to set type in. */
+.gradeA {
+  --grade: var(--status-success);
+  color: var(--status-success);
+}
+
+.gradeB {
+  --grade: var(--color-secondary-dark);
+  color: var(--color-secondary-dark);
+}
+
+.gradeC {
+  --grade: #d99a2b;
+  color: #d99a2b;
+}
+
+.gradeD {
+  --grade: #e08a3c;
+  color: #e08a3c;
+}
+
+.gradeE {
+  --grade: #c74b4b;
+  color: #c74b4b;
+}
+
+/* Never assessed. Grey, not red — the distinction the API is careful to make with
+   `score: null` would be undone by colouring it like a failure. */
+.gradeNone {
+  --grade: var(--text-muted);
+  color: var(--text-muted);
+}
+
+/* ── Score row ── */
+.scoreRow {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 30px;
+  align-items: center;
+  padding: 26px 28px;
+  background: var(--surface-card);
+  border-radius: var(--radius-xl);
+  box-shadow: var(--clay-shadow-md);
+}
+
+.dial {
+  position: relative;
+  width: 174px;
+  height: 174px;
+  flex-shrink: 0;
+}
+
+.dial svg {
+  width: 100%;
+  height: 100%;
+}
+
+.dialTrack {
+  fill: none;
+  stroke: rgba(61, 64, 91, 0.09);
+  stroke-width: 13;
+}
+
+.dialArc {
+  fill: none;
+  stroke: var(--grade);
+  stroke-width: 13;
+  stroke-linecap: round;
+  transition: stroke-dasharray 0.6s ease;
+}
+
+.dialCentre {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 1px;
+  pointer-events: none;
+}
+
+.dialScore {
+  font-family: var(--font-heading);
+  font-size: 2.5rem;
+  font-weight: 800;
+  line-height: 1;
+  color: var(--grade);
+  font-variant-numeric: tabular-nums;
+}
+
+.dialOf {
+  font-size: 0.7rem;
+  color: var(--text-muted);
+}
+
+.dialGrade {
+  margin-top: 5px;
+  padding: 3px 11px;
+  border-radius: var(--radius-pill);
+  background: var(--grade);
+  color: #fff;
+  font-family: var(--font-heading);
+  font-size: 0.72rem;
+  font-weight: 800;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+}
+
+.scoreSide {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  min-width: 0;
+}
+
+.gradeMeaning {
+  font-family: var(--font-heading);
+  font-size: 1.02rem;
+  font-weight: 700;
+  line-height: 1.55;
+  color: var(--text-primary);
+}
+
+.trendRow {
+  display: flex;
+  gap: 9px;
+  flex-wrap: wrap;
+}
+
+.trendPill {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 13px;
+  border-radius: var(--radius-pill);
+  font-size: 0.8rem;
+  font-weight: 600;
+}
+
+.trendUp {
+  background: var(--status-success-bg);
+  color: #2c6b2f;
+}
+
+.trendDown {
+  background: var(--status-error-bg);
+  color: #a33c3c;
+}
+
+.trendFlat {
+  background: var(--surface-elevated);
+  color: var(--text-secondary);
+}
+
+.sparkWrap {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+
+.spark {
+  width: 100%;
+  max-width: 320px;
+  height: 54px;
+}
+
+.spark path {
+  fill: none;
+  stroke: var(--color-primary);
+  stroke-width: 2.5;
+  stroke-linejoin: round;
+  stroke-linecap: round;
+  vector-effect: non-scaling-stroke;
+}
+
+.sparkCaption {
+  font-size: 0.75rem;
+  line-height: 1.55;
+  color: var(--text-muted);
+  max-width: 420px;
+}
+
+.liveNote {
+  display: flex;
+  align-items: flex-start;
+  gap: 7px;
+  font-size: 0.79rem;
+  line-height: 1.6;
+  color: var(--text-muted);
+}
+
+.liveNote svg {
+  flex-shrink: 0;
+  margin-top: 3px;
+}
+
+.snapshotRow {
+  display: flex;
+  align-items: center;
+  gap: 13px;
+  flex-wrap: wrap;
+  margin-top: 2px;
+}
+
+.snapshotHint {
+  font-size: 0.77rem;
+  line-height: 1.55;
+  color: var(--text-muted);
+  max-width: 320px;
+}
+
+.snapshotNote {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  padding: 10px 13px;
+  background: var(--status-success-bg);
+  border-radius: var(--radius-md);
+  font-size: 0.83rem;
+  line-height: 1.6;
+  color: #2c6b2f;
+}
+
+.snapshotNote svg {
+  flex-shrink: 0;
+  margin-top: 2px;
+}
+
+/* ── Cards ── */
+.card {
+  display: flex;
+  flex-direction: column;
+  gap: 15px;
+  padding: 24px 26px;
+  background: var(--surface-card);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--clay-shadow-sm);
+}
+
+.card h2 {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  font-family: var(--font-heading);
+  font-size: 1.02rem;
+  font-weight: 700;
+  color: var(--text-primary);
+}
+
+.card h2 svg {
+  color: var(--color-primary);
+  flex-shrink: 0;
+}
+
+.cardLead {
+  font-size: 0.85rem;
+  line-height: 1.7;
+  color: var(--text-secondary);
+  max-width: 640px;
+  margin-top: -6px;
+}
+
+.card > a {
+  width: fit-content;
+}
+
+/* ── The five components ── */
+.components {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.component {
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+}
+
+.componentHead {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 14px;
+}
+
+.componentLabel {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-family: var(--font-heading);
+  font-size: 0.9rem;
+  font-weight: 700;
+  color: var(--text-primary);
+}
+
+.componentLabel svg {
+  color: var(--text-muted);
+  flex-shrink: 0;
+}
+
+.componentScore {
+  font-family: var(--font-heading);
+  font-size: 1.02rem;
+  font-weight: 800;
+  color: var(--text-primary);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.componentOf {
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: var(--text-muted);
+}
+
+.bar {
+  height: 9px;
+  background: rgba(61, 64, 91, 0.08);
+  border-radius: var(--radius-pill);
+  overflow: hidden;
+}
+
+.barFillGood,
+.barFillMid,
+.barFillPoor {
+  height: 100%;
+  border-radius: var(--radius-pill);
+  transition: width 0.6s ease;
+}
+
+/* Thresholds on the *component*, not the total. A component at full marks is green
+   even inside a poor overall score, because the point of the breakdown is to show
+   which part is the problem. */
+.barFillGood {
+  background: var(--status-success);
+}
+
+.barFillMid {
+  background: #d99a2b;
+}
+
+.barFillPoor {
+  background: #c74b4b;
+}
+
+.componentDetail {
+  font-size: 0.83rem;
+  line-height: 1.65;
+  color: var(--text-secondary);
+}
+
+/* ── Recommendations ── */
+.recos {
+  display: flex;
+  flex-direction: column;
+  gap: 11px;
+  margin: 0;
+  padding-left: 22px;
+}
+
+.recos li {
+  font-size: 0.88rem;
+  line-height: 1.7;
+  color: var(--text-primary);
+}
+
+.recos li::marker {
+  color: var(--color-primary);
+  font-family: var(--font-heading);
+  font-weight: 800;
+}
+
+/* ── Stats ── */
+.statGrid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(178px, 1fr));
+  gap: 12px;
+  margin: 0;
+}
+
+.stat {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  padding: 13px 15px;
+  background: var(--surface-elevated);
+  border-radius: var(--radius-md);
+  border: 1.5px solid transparent;
+}
+
+.stat dt {
+  font-size: 0.78rem;
+  color: var(--text-secondary);
+}
+
+.stat dd {
+  margin: 0;
+  font-family: var(--font-heading);
+  font-size: 1.35rem;
+  font-weight: 800;
+  color: var(--text-primary);
+  font-variant-numeric: tabular-nums;
+}
+
+.statWarn {
+  background: var(--status-warning-bg);
+  border-color: rgba(245, 200, 105, 0.5);
+}
+
+.statBad {
+  background: var(--status-error-bg);
+  border-color: rgba(229, 115, 115, 0.4);
+}
+
+.statBad dd {
+  color: #a33c3c;
+}
+
+/* ── Roster summary ── */
+.summaryRow {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  gap: 14px;
+}
+
+.summaryTile {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 18px 20px;
+  background: var(--surface-card);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--clay-shadow-sm);
+}
+
+.summaryValue {
+  font-family: var(--font-heading);
+  font-size: 1.9rem;
+  font-weight: 800;
+  line-height: 1.1;
+  color: var(--text-primary);
+  font-variant-numeric: tabular-nums;
+}
+
+.summaryLabel {
+  font-size: 0.78rem;
+  color: var(--text-secondary);
+}
+
+.summaryWide {
+  grid-column: span 2;
+  min-width: 240px;
+}
+
+.gradeBars {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  margin-top: 7px;
+}
+
+.gradeBarRow {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+}
+
+.gradeChip {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 21px;
+  height: 21px;
+  border-radius: 7px;
+  background: var(--grade);
+  color: #fff;
+  font-family: var(--font-heading);
+  font-size: 0.72rem;
+  font-weight: 800;
+  flex-shrink: 0;
+}
+
+.gradeBarTrack {
+  flex: 1;
+  height: 8px;
+  background: rgba(61, 64, 91, 0.07);
+  border-radius: var(--radius-pill);
+  overflow: hidden;
+}
+
+.gradeBarFill {
+  height: 100%;
+  background: var(--grade);
+  border-radius: var(--radius-pill);
+  transition: width 0.5s ease;
+}
+
+.gradeBarCount {
+  min-width: 22px;
+  text-align: right;
+  font-family: var(--font-heading);
+  font-size: 0.8rem;
+  font-weight: 700;
+  color: var(--text-secondary);
+  font-variant-numeric: tabular-nums;
+}
+
+/* ── Table head with its filter ── */
+.tableHead {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  flex-wrap: wrap;
+}
+
+.countPill {
+  padding: 2px 10px;
+  border-radius: var(--radius-pill);
+  background: var(--surface-warm);
+  font-size: 0.75rem;
+  font-weight: 700;
+  color: var(--text-secondary);
+}
+
+.searchForm {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 9px 14px;
+  background: var(--surface-input);
+  border: 1.5px solid rgba(61, 64, 91, 0.1);
+  border-radius: var(--radius-pill);
+  transition: border-color 0.2s, box-shadow 0.2s;
+}
+
+.searchForm:focus-within {
+  border-color: var(--color-primary);
+  box-shadow: 0 0 0 3px rgba(224, 122, 95, 0.13);
+}
+
+.searchForm > svg {
+  color: var(--text-muted);
+  flex-shrink: 0;
+}
+
+.searchForm input {
+  width: 190px;
+  min-width: 0;
+  border: none;
+  background: none;
+  outline: none;
+  font-family: var(--font-body);
+  font-size: 0.85rem;
+  color: var(--text-primary);
+}
+
+.searchForm input::placeholder {
+  color: var(--text-muted);
+}
+
+.searchClear {
+  display: flex;
+  padding: 0;
+  border: none;
+  background: none;
+  cursor: pointer;
+  color: var(--text-muted);
+  flex-shrink: 0;
+}
+
+.searchClear:hover {
+  color: var(--color-primary);
+}
+
+/* ── Table cells ── */
+.subName {
+  display: block;
+  font-size: 0.75rem;
+  color: var(--text-muted);
+  font-weight: 400;
+}
+
+.whereCell {
+  font-size: 0.85rem;
+  color: var(--text-secondary);
+  white-space: nowrap;
+}
+
+.scoreCell {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.scoreCellNum {
+  font-family: var(--font-heading);
+  font-size: 1.05rem;
+  font-weight: 800;
+  color: var(--grade);
+  font-variant-numeric: tabular-nums;
+}
+
+.gradeChipSm {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 19px;
+  height: 19px;
+  border-radius: 6px;
+  background: var(--grade);
+  color: #fff;
+  font-family: var(--font-heading);
+  font-size: 0.68rem;
+  font-weight: 800;
+}
+
+.notAssessed {
+  font-size: 0.8rem;
+  color: var(--text-muted);
+  font-style: italic;
+  white-space: nowrap;
+}
+
+/* The recommendation is prose in a table cell, so it is given room and allowed to
+   wrap rather than being truncated into something unreadable. */
+.recoCell {
+  max-width: 330px;
+  font-size: 0.82rem;
+  line-height: 1.55;
+  color: var(--text-secondary);
+}
+
+.whenCell {
+  font-size: 0.82rem;
+  color: var(--text-secondary);
+  white-space: nowrap;
+}
+
+.staleFlag {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  margin-top: 3px;
+  font-size: 0.7rem;
+  color: #a8741a;
+}
+
+/* ── Notes ── */
+.emptyNote,
+.warnNote,
+.errorBox {
+  display: flex;
+  align-items: flex-start;
+  gap: 11px;
+  padding: 15px 18px;
+  border-radius: var(--radius-lg);
+  font-size: 0.86rem;
+  line-height: 1.65;
+}
+
+.emptyNote svg,
+.warnNote svg,
+.errorBox svg {
+  flex-shrink: 0;
+  margin-top: 2px;
+}
+
+.emptyNote {
+  background: var(--surface-elevated);
+  color: var(--text-secondary);
+}
+
+.emptyNote svg {
+  color: var(--text-muted);
+}
+
+.warnNote {
+  background: var(--status-warning-bg);
+  color: #7a5718;
+}
+
+.warnNote svg {
+  color: #8a6420;
+}
+
+.errorBox {
+  background: var(--status-error-bg);
+  color: #a33c3c;
+  box-shadow: var(--clay-shadow-sm);
+}
+
+.errorBox > div {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 10px;
+}
+
+.errorBox strong {
+  font-family: var(--font-heading);
+  font-weight: 700;
+}
+
+.errorBox a {
+  color: inherit;
+  font-weight: 700;
+  text-decoration: underline;
+}
+
+.footNote {
+  font-size: 0.79rem;
+  line-height: 1.7;
+  color: var(--text-muted);
+  max-width: 700px;
+}
+
+/* ── Responsive ── */
+@media (max-width: 900px) {
+  .scoreRow {
+    grid-template-columns: 1fr;
+    justify-items: center;
+    gap: 22px;
+    text-align: center;
+  }
+
+  .scoreSide {
+    align-items: center;
+  }
+
+  .trendRow,
+  .snapshotRow {
+    justify-content: center;
+  }
+
+  .liveNote {
+    text-align: left;
+  }
+
+  .summaryWide {
+    grid-column: span 2;
+  }
+}
+
+@media (max-width: 640px) {
+  .header h1 {
+    font-size: 1.4rem;
+  }
+
+  .card {
+    padding: 18px 16px;
+  }
+
+  .scoreRow {
+    padding: 20px 16px;
+  }
+
+  .summaryWide {
+    grid-column: span 1;
+  }
+
+  .searchForm input {
+    width: 100%;
+  }
+
+  .searchForm {
+    flex: 1;
+  }
+
+  .recoCell {
+    max-width: 240px;
+  }
+}

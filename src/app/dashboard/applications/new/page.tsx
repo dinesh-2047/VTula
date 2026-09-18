@@ -1,18 +1,61 @@
 'use client';
 
-import { useState, useEffect, Suspense } from 'react';
+import { useState, useEffect, useCallback, useRef, Suspense } from 'react';
 import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
+import { useSession } from 'next-auth/react';
 import {
   FileText,
   ArrowLeft,
+  ArrowRight,
   Loader2,
   CheckCircle,
   CreditCard,
   Scale,
+  AlertTriangle,
+  Info,
+  Clock,
 } from 'lucide-react';
-import { calculateFee } from '@/lib/utils';
+import {
+  VERIFICATION_TYPES,
+  VERIFICATION_TYPE_LABELS,
+  type VerificationType,
+} from '@/lib/constants';
+import { payApplicationFee, prefetchCheckout } from '@/lib/razorpayCheckout';
 import styles from './newApp.module.css';
+
+/**
+ * Filing an application, then paying for it.
+ *
+ * The old page had the order backwards: it created a Razorpay order for a fee it
+ * calculated in the browser, took the payment, and only then created the
+ * application — passing `feeStatus: 'Paid'` along with it. That meant the price
+ * was whatever the client believed, the charge was whatever the client asked for,
+ * and a payment that succeeded while the application creation failed left money
+ * taken against nothing.
+ *
+ * The order now matches the server: file the application (the server computes the
+ * fee from the applicable rule), open an order *for that application*, pay, and
+ * let `/api/payments/verify` be the only thing that marks it paid.
+ *
+ * Two further things were wrong once the payment could fail:
+ *
+ *  - Checkout lived here, with its own `Window.Razorpay` declaration and its own
+ *    copy of the order → pay → verify sequence. It now calls
+ *    `payApplicationFee()` from `@/lib/razorpayCheckout`, which is the single
+ *    implementation the application page uses too. Two copies of a payment flow
+ *    drift, and the copy that drifts is the one that credits money.
+ *  - An abandoned or failed payment dropped the applicant back onto the *form*
+ *    with a message saying they could "pay from the application page". Pressing
+ *    the only button in front of them would try to file the application a second
+ *    time, and the page they were sent to went unnamed. There is now a filed-but-
+ *    unpaid state that says what happened, offers the payment again, and links to
+ *    the application itself.
+ *
+ * The verification types come from `@/lib/constants` rather than a local list:
+ * the local one labelled `repair` "After Repair" while the rest of the product
+ * calls it "Post-repair Verification".
+ */
 
 interface InstrumentOption {
   _id: string;
@@ -23,192 +66,254 @@ interface InstrumentOption {
   address?: string;
   installationDistrict?: string;
   installationState?: string;
+  isDecommissioned?: boolean;
 }
 
-declare global {
-  interface Window {
-    Razorpay: any;
-  }
+interface Preview {
+  verificationType: { effective: string; label: string; reclassified?: string };
+  fee: { amount: number; base: number; payable: boolean; note?: string };
+  rule: {
+    name: string;
+    matchedScope: string;
+    validityMonths: number;
+    requiredDocuments: string[];
+    legalReference?: string;
+  };
+  blockers: { code: string; message: string }[];
+}
+
+interface FiledApplication {
+  id: string;
+  applicationNo: string;
+  feeStatus: string;
+  feeAmount: number;
 }
 
 function NewApplicationForm() {
   const router = useRouter();
   const searchParams = useSearchParams();
+  const { data: session } = useSession();
   const preselectedInstId = searchParams.get('instrumentId');
 
   const [instruments, setInstruments] = useState<InstrumentOption[]>([]);
   const [loading, setLoading] = useState(true);
+  const [preview, setPreview] = useState<Preview | null>(null);
+  const [previewing, setPreviewing] = useState(false);
   const [submitting, setSubmitting] = useState(false);
+  const [stage, setStage] = useState<'form' | 'filing' | 'paying' | 'unpaid' | 'done'>('form');
   const [error, setError] = useState('');
-  const [success, setSuccess] = useState(false);
+  const [notice, setNotice] = useState('');
+  const [filed, setFiled] = useState<FiledApplication | null>(null);
 
   const [formData, setFormData] = useState({
     instrumentId: preselectedInstId || '',
     type: 'initial',
     inspectionLocation: 'On-Site Business Premises',
-    proposedDate: '',
-    notes: '',
+    preferredDate: '',
+    remarks: '',
   });
 
+  // Warm the checkout script now rather than at the moment pay is pressed. The
+  // fee falls due immediately after filing, and racing the download there is what
+  // made the old page tell people to refresh mid-payment.
   useEffect(() => {
-    fetchInstruments();
-    loadRazorpayScript();
+    prefetchCheckout();
   }, []);
 
-  const loadRazorpayScript = () => {
-    if (document.getElementById('razorpay-checkout-script')) return;
-    const script = document.createElement('script');
-    script.id = 'razorpay-checkout-script';
-    script.src = 'https://checkout.razorpay.com/v1/checkout.js';
-    script.async = true;
-    document.body.appendChild(script);
-  };
+  useEffect(() => {
+    let cancelled = false;
+    void (async () => {
+      try {
+        // The default excludes decommissioned instruments, which cannot be
+        // submitted for verification anyway.
+        const res = await fetch('/api/instruments');
+        const data = (await res.json()) as {
+          success: boolean;
+          error?: string;
+          instruments?: InstrumentOption[];
+        };
+        if (cancelled) return;
 
-  const fetchInstruments = async () => {
-    try {
-      const res = await fetch('/api/instruments');
-      const data = await res.json();
-      if (data.success) {
-        setInstruments(data.instruments);
-        if (!preselectedInstId && data.instruments.length > 0) {
-          setFormData((prev) => ({ ...prev, instrumentId: data.instruments[0]._id }));
+        if (data.success) {
+          const list = data.instruments ?? [];
+          setInstruments(list);
+          if (!preselectedInstId && list.length > 0) {
+            setFormData((prev) => ({ ...prev, instrumentId: list[0]._id }));
+          }
+        } else {
+          setError(data.error || 'Could not load your instruments');
         }
+      } catch {
+        if (!cancelled) {
+          setError('Could not load your instruments. Check your connection and try again.');
+        }
+      } finally {
+        if (!cancelled) setLoading(false);
       }
-    } catch (err) {
-      console.error(err);
-    } finally {
-      setLoading(false);
-    }
-  };
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [preselectedInstId]);
 
-  const selectedInstrument = instruments.find((i) => i._id === formData.instrumentId);
-  const calculatedFee = selectedInstrument
-    ? calculateFee(selectedInstrument.type)
-    : 500;
-
-  const createApplication = async (paymentId?: string, orderId?: string) => {
-    const locationText =
-      formData.inspectionLocation === 'On-Site Business Premises' && selectedInstrument?.address
-        ? `${selectedInstrument.address}, ${selectedInstrument.installationDistrict || ''}, ${selectedInstrument.installationState || ''}`
-        : formData.inspectionLocation;
-
-    const res = await fetch('/api/applications', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        ...formData,
-        inspectionLocation: locationText,
-        paymentId,
-        orderId,
-        feeStatus: paymentId ? 'Paid' : 'Unpaid',
-      }),
-    });
-
-    const data = await res.json();
-    if (data.success) {
-      setSuccess(true);
-      setTimeout(() => {
-        router.push('/dashboard/applications');
-      }, 1500);
-    } else {
-      setError(data.error || 'Failed to submit application');
-    }
-  };
-
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!formData.instrumentId) {
-      setError('Please select an instrument');
+  /**
+   * The fee, the rule and any blockers all come from the server.
+   *
+   * `seq` drops the answer to a superseded request: changing instrument twice in
+   * quick succession could otherwise leave the first instrument's fee on screen
+   * next to the second instrument's name.
+   */
+  const previewSeq = useRef(0);
+  const loadPreview = useCallback(async (instrumentId: string, type: string) => {
+    const seq = ++previewSeq.current;
+    if (!instrumentId) {
+      setPreview(null);
       return;
     }
-
-    setSubmitting(true);
-    setError('');
-
+    setPreviewing(true);
     try {
-      // 1. Create Razorpay order from backend
-      const orderRes = await fetch('/api/payments/create-order', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          amount: calculatedFee,
-          currency: 'INR',
-          notes: {
-            instrumentId: formData.instrumentId,
-            type: formData.type,
-          },
-        }),
+      const res = await fetch(
+        `/api/applications/preview?instrumentId=${encodeURIComponent(instrumentId)}&type=${encodeURIComponent(type)}`
+      );
+      const data = (await res.json()) as Preview & { success: boolean; error?: string };
+      if (seq !== previewSeq.current) return;
+      setPreview(data.success ? data : null);
+      if (!data.success) setError(data.error || 'Could not price this application');
+    } catch {
+      if (seq === previewSeq.current) setPreview(null);
+    } finally {
+      if (seq === previewSeq.current) setPreviewing(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    let cancelled = false;
+    void (async () => {
+      await Promise.resolve();
+      if (cancelled) return;
+      await loadPreview(formData.instrumentId, formData.type);
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [formData.instrumentId, formData.type, loadPreview]);
+
+  const selectedInstrument = instruments.find((i) => i._id === formData.instrumentId);
+  const fee = preview?.fee.amount ?? null;
+  const blocked = (preview?.blockers.length ?? 0) > 0;
+
+  const finish = useCallback(() => {
+    setError('');
+    setStage('done');
+    setTimeout(() => router.push('/dashboard/applications'), 2200);
+  }, [router]);
+
+  /** Step 2: pay the fee the server computed for the filed application. */
+  const payFor = useCallback(
+    async (application: FiledApplication) => {
+      setError('');
+      setNotice('');
+      setSubmitting(true);
+      setStage('paying');
+
+      const result = await payApplicationFee({
+        applicationId: application.id,
+        applicationNo: application.applicationNo,
+        prefill: {
+          name: session?.user?.name ?? undefined,
+          email: session?.user?.email ?? undefined,
+        },
       });
 
-      const orderData = await orderRes.json();
+      setSubmitting(false);
 
-      if (!orderData.success) {
-        setError(orderData.error || 'Could not initiate payment order');
-        setSubmitting(false);
+      if (result.status === 'paid') {
+        setFiled({ ...application, feeStatus: result.feeStatus ?? 'Paid' });
+        finish();
         return;
       }
 
-      // 2. Open Razorpay Checkout modal
-      const razorpayKey = process.env.NEXT_PUBLIC_RAZORPAY_KEY_ID || 'rzp_test_TSXVVEQ0vFzSGZ';
+      // The application exists either way. Everything from here on is about the
+      // fee, and the wording must never suggest filing again.
+      setStage('unpaid');
+      setNotice(
+        result.status === 'dismissed'
+          ? 'The payment window was closed before the fee was paid.'
+          : result.message
+      );
+    },
+    [finish, session?.user?.email, session?.user?.name]
+  );
 
-      const options = {
-        key: razorpayKey,
-        amount: orderData.order.amount,
-        currency: orderData.order.currency,
-        name: 'VTULA Legal Metrology',
-        description: `Statutory Fee for ${selectedInstrument?.type || 'Instrument'} Verification`,
-        order_id: orderData.order.id,
-        handler: async function (response: any) {
-          try {
-            // 3. Verify Payment signature
-            const verifyRes = await fetch('/api/payments/verify', {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({
-                razorpay_order_id: response.razorpay_order_id,
-                razorpay_payment_id: response.razorpay_payment_id,
-                razorpay_signature: response.razorpay_signature,
-              }),
-            });
+  /** Step 1: file the application. The server prices it. */
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!formData.instrumentId) {
+      setError('Select the instrument this application is for');
+      return;
+    }
+    if (blocked) return;
 
-            const verifyData = await verifyRes.json();
+    setSubmitting(true);
+    setError('');
+    setStage('filing');
 
-            if (verifyData.success) {
-              // 4. Save Application with feeStatus: 'Paid'
-              await createApplication(response.razorpay_payment_id, response.razorpay_order_id);
-            } else {
-              setError('Payment verification failed. Please contact support.');
-            }
-          } catch {
-            setError('Payment verification failed.');
-          } finally {
-            setSubmitting(false);
-          }
-        },
-        modal: {
-          ondismiss: function () {
-            setSubmitting(false);
-          },
-        },
-        theme: {
-          color: '#E07A5F',
-        },
+    try {
+      const locationText =
+        formData.inspectionLocation === 'On-Site Business Premises' && selectedInstrument?.address
+          ? `${selectedInstrument.address}, ${selectedInstrument.installationDistrict ?? ''}, ${selectedInstrument.installationState ?? ''}`
+          : formData.inspectionLocation;
+
+      const res = await fetch('/api/applications', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          instrumentId: formData.instrumentId,
+          type: formData.type,
+          inspectionLocation: locationText,
+          preferredDate: formData.preferredDate || undefined,
+          remarks: formData.remarks || undefined,
+        }),
+      });
+      const data = (await res.json()) as {
+        success: boolean;
+        error?: string;
+        application?: {
+          id: string;
+          applicationNo: string;
+          feeStatus: string;
+          feeAmount: number;
+        };
       };
 
-      if (window.Razorpay) {
-        const rzp = new window.Razorpay(options);
-        rzp.on('payment.failed', function (response: any) {
-          setError(`Payment Failed: ${response.error?.description || 'Transaction declined'}`);
-          setSubmitting(false);
-        });
-        rzp.open();
-      } else {
-        setError('Razorpay SDK failed to load. Please refresh and try again.');
+      if (!data.success || !data.application) {
+        setError(data.error || 'The application could not be filed');
         setSubmitting(false);
+        setStage('form');
+        return;
       }
+
+      const app = data.application;
+      const record: FiledApplication = {
+        id: app.id,
+        applicationNo: app.applicationNo,
+        feeStatus: app.feeStatus,
+        feeAmount: app.feeAmount ?? 0,
+      };
+      setFiled(record);
+
+      // A waived fee has nothing to pay for.
+      if (app.feeStatus === 'Waived' || !app.feeAmount) {
+        setSubmitting(false);
+        finish();
+        return;
+      }
+
+      await payFor(record);
     } catch {
-      setError('Something went wrong. Please try again.');
+      setError('Something went wrong. Check your connection and try again.');
       setSubmitting(false);
+      setStage('form');
     }
   };
 
@@ -216,7 +321,7 @@ function NewApplicationForm() {
     return (
       <div className={styles.loadingWrap}>
         <Loader2 size={36} className={styles.spin} style={{ color: 'var(--color-primary)' }} />
-        <p>Loading form...</p>
+        <p>Loading your instruments…</p>
       </div>
     );
   }
@@ -225,7 +330,7 @@ function NewApplicationForm() {
     <div className={styles.page}>
       <Link href="/dashboard/applications" className={styles.backLink}>
         <ArrowLeft size={16} />
-        Back to Applications
+        Back to applications
       </Link>
 
       <div className={styles.container}>
@@ -234,16 +339,63 @@ function NewApplicationForm() {
             <FileText size={28} />
           </div>
           <div>
-            <h1>Submit Verification Application</h1>
-            <p>Apply for Legal Metrology stamping & verification with auto fee calculation.</p>
+            <h1>Apply for verification</h1>
+            <p>
+              File an application for stamping and verification under the Legal Metrology Act, 2009.
+            </p>
           </div>
         </div>
 
-        {success ? (
+        {stage === 'done' ? (
           <div className={styles.successCard}>
             <CheckCircle size={48} style={{ color: 'var(--color-secondary)' }} />
-            <h2>Application Submitted & Fee Paid!</h2>
-            <p>Your payment was verified and the application filed successfully. Redirecting...</p>
+            <h2>{filed?.applicationNo} filed</h2>
+            <p>
+              {filed?.feeStatus === 'Paid'
+                ? 'Your fee has been received. The application is now with the Legal Metrology department — you will be notified when an inspection is scheduled.'
+                : 'No fee is payable. The application is now with the Legal Metrology department for review.'}
+            </p>
+            <p style={{ color: 'var(--text-muted)', fontSize: '0.85rem' }}>
+              Taking you to your applications…
+            </p>
+          </div>
+        ) : stage === 'unpaid' && filed ? (
+          /*
+           * Filed, fee outstanding. The application is real and must not be filed
+           * again, so the form is gone and both routes forward are named.
+           */
+          <div className={styles.successCard}>
+            <Clock size={44} style={{ color: 'var(--status-warning)' }} />
+            <h2>{filed.applicationNo} filed — fee outstanding</h2>
+            <p>{notice}</p>
+            <p className={styles.filedNote}>
+              Nothing has been charged and the application has not been lost: it is filed and will
+              be reviewed. The certificate cannot be issued until the ₹
+              {filed.feeAmount.toLocaleString('en-IN')} fee is paid, and you can pay it here or from
+              the application at any time.
+            </p>
+            <div className={styles.filedActions}>
+              <button
+                type="button"
+                className="clay-btn clay-btn-primary"
+                onClick={() => void payFor(filed)}
+                disabled={submitting}
+              >
+                {submitting ? (
+                  <Loader2 size={18} className={styles.spin} />
+                ) : (
+                  <CreditCard size={18} />
+                )}
+                Pay ₹{filed.feeAmount.toLocaleString('en-IN')} now
+              </button>
+              <Link
+                href={`/dashboard/applications/${filed.id}`}
+                className="clay-btn clay-btn-outline"
+              >
+                Open {filed.applicationNo}
+                <ArrowRight size={16} />
+              </Link>
+            </div>
           </div>
         ) : (
           <form onSubmit={handleSubmit} className={styles.formCard}>
@@ -251,24 +403,29 @@ function NewApplicationForm() {
 
             <div className={styles.formGrid}>
               <div className="clay-input-group" style={{ gridColumn: 'span 2' }}>
-                <label className="clay-label">Select Instrument *</label>
+                <label className="clay-label">Instrument *</label>
                 {instruments.length === 0 ? (
                   <div className={styles.noInstWarning}>
-                    <p>No instruments registered yet.</p>
-                    <Link href="/dashboard/instruments/new" className="clay-btn clay-btn-sm clay-btn-primary">
-                      Register Instrument First
+                    <p>You have no instruments registered yet.</p>
+                    <Link
+                      href="/dashboard/instruments/new"
+                      className="clay-btn clay-btn-sm clay-btn-primary"
+                    >
+                      Register an instrument
                     </Link>
                   </div>
                 ) : (
                   <select
                     className="clay-input clay-select"
                     value={formData.instrumentId}
-                    onChange={(e) => setFormData((prev) => ({ ...prev, instrumentId: e.target.value }))}
+                    onChange={(e) =>
+                      setFormData((prev) => ({ ...prev, instrumentId: e.target.value }))
+                    }
                     required
                   >
                     {instruments.map((i) => (
                       <option key={i._id} value={i._id}>
-                        {i.type} — {i.brand} ({i.serialNo})
+                        {i.type} — {i.brand} {i.model} ({i.serialNo})
                       </option>
                     ))}
                   </select>
@@ -276,74 +433,160 @@ function NewApplicationForm() {
               </div>
 
               <div className="clay-input-group">
-                <label className="clay-label">Verification Type *</label>
+                <label className="clay-label">Type of verification *</label>
                 <select
                   className="clay-input clay-select"
                   value={formData.type}
                   onChange={(e) => setFormData((prev) => ({ ...prev, type: e.target.value }))}
                 >
-                  <option value="initial">Initial Verification</option>
-                  <option value="re-verification">Periodic Re-verification</option>
+                  {VERIFICATION_TYPES.map((t) => (
+                    <option key={t} value={t}>
+                      {VERIFICATION_TYPE_LABELS[t as VerificationType]}
+                    </option>
+                  ))}
                 </select>
               </div>
 
               <div className="clay-input-group">
-                <label className="clay-label">Inspection Venue *</label>
+                <label className="clay-label">Where the inspection will happen *</label>
                 <select
                   className="clay-input clay-select"
                   value={formData.inspectionLocation}
-                  onChange={(e) => setFormData((prev) => ({ ...prev, inspectionLocation: e.target.value }))}
+                  onChange={(e) =>
+                    setFormData((prev) => ({ ...prev, inspectionLocation: e.target.value }))
+                  }
                 >
-                  <option value="On-Site Business Premises">On-Site Business Premises</option>
-                  <option value="Government Approved Test Centre (GATC Lab)">Government Test Centre (GATC Lab)</option>
-                  <option value="Regional Metrology Office">Regional Metrology Office</option>
+                  <option value="On-Site Business Premises">At my business premises</option>
+                  <option value="Government Approved Test Centre (GATC Lab)">
+                    Government Approved Test Centre (GATC)
+                  </option>
+                  <option value="Regional Metrology Office">Regional Metrology office</option>
                 </select>
               </div>
 
               <div className="clay-input-group">
-                <label className="clay-label">Preferred Inspection Date</label>
+                <label className="clay-label">Preferred date (optional)</label>
                 <input
                   type="date"
                   className="clay-input"
-                  value={formData.proposedDate}
-                  onChange={(e) => setFormData((prev) => ({ ...prev, proposedDate: e.target.value }))}
+                  value={formData.preferredDate}
+                  onChange={(e) =>
+                    setFormData((prev) => ({ ...prev, preferredDate: e.target.value }))
+                  }
                   min={new Date().toISOString().split('T')[0]}
                 />
               </div>
 
               <div className="clay-input-group" style={{ gridColumn: 'span 2' }}>
-                <label className="clay-label">Additional Instructions / Notes</label>
+                <label className="clay-label">Anything the officer should know (optional)</label>
                 <textarea
                   className="clay-input"
-                  placeholder="e.g. Please call before arrival at factory premises"
-                  value={formData.notes}
-                  onChange={(e) => setFormData((prev) => ({ ...prev, notes: e.target.value }))}
+                  placeholder="e.g. Please call before arriving — the premises are inside a gated market."
+                  value={formData.remarks}
+                  onChange={(e) => setFormData((prev) => ({ ...prev, remarks: e.target.value }))}
                   rows={3}
                 />
               </div>
             </div>
 
-            {/* Fee Summary Box */}
+            {preview?.verificationType.reclassified && (
+              <div className={styles.feeCard} style={{ marginTop: 20 }}>
+                <div className={styles.feeHeader}>
+                  <Info size={18} />
+                  <span>Filed as {preview.verificationType.label}</span>
+                </div>
+                <p style={{ fontSize: '0.85rem', color: 'var(--text-secondary)' }}>
+                  {preview.verificationType.reclassified}
+                </p>
+              </div>
+            )}
+
+            {preview?.blockers.map((b) => (
+              <div key={b.code} className={styles.error} style={{ marginTop: 20, marginBottom: 0 }}>
+                <AlertTriangle size={14} style={{ verticalAlign: 'middle', marginRight: 6 }} />
+                {b.message}
+              </div>
+            ))}
+
+            {/* The fee, as quoted by the server that will charge it. */}
             <div className={styles.feeCard}>
               <div className={styles.feeHeader}>
                 <Scale size={20} />
-                <span>Statutory Government Fee Breakdown</span>
+                <span>Statutory fee</span>
               </div>
-              <div className={styles.feeRow}>
-                <span>Verification Fee ({selectedInstrument?.type || 'Standard'})</span>
-                <span>₹{calculatedFee}</span>
-              </div>
-              <div className={styles.feeRow}>
-                <span>Portal Service Charge</span>
-                <span>₹0 (Waived)</span>
-              </div>
-              <div className={`${styles.feeRow} ${styles.feeTotal}`}>
-                <span>Total Amount Due</span>
-                <span>₹{calculatedFee}</span>
-              </div>
+
+              {previewing ? (
+                <div className={styles.feeRow}>
+                  <span>Calculating from the applicable rule…</span>
+                  <Loader2 size={14} className={styles.spin} />
+                </div>
+              ) : preview ? (
+                <>
+                  <div className={styles.feeRow}>
+                    <span>{preview.verificationType.label}</span>
+                    <span>₹{preview.fee.amount}</span>
+                  </div>
+                  <div className={styles.feeRow}>
+                    <span>Portal charge</span>
+                    <span>None</span>
+                  </div>
+                  <div className={`${styles.feeRow} ${styles.feeTotal}`}>
+                    <span>Payable now</span>
+                    <span>₹{preview.fee.amount}</span>
+                  </div>
+                  <div
+                    className={styles.feeRow}
+                    style={{ fontSize: '0.78rem', color: 'var(--text-muted)', marginTop: 8 }}
+                  >
+                    <span>
+                      {preview.rule.name} · {preview.rule.matchedScope} · certificate valid{' '}
+                      {preview.rule.validityMonths} months
+                    </span>
+                  </div>
+                  {preview.rule.legalReference && (
+                    <div
+                      className={styles.feeRow}
+                      style={{ fontSize: '0.78rem', color: 'var(--text-muted)' }}
+                    >
+                      <span>{preview.rule.legalReference}</span>
+                    </div>
+                  )}
+                  {preview.fee.note && (
+                    <div className={styles.feeRow} style={{ fontSize: '0.8rem' }}>
+                      <span>{preview.fee.note}</span>
+                    </div>
+                  )}
+                </>
+              ) : (
+                <div className={styles.feeRow}>
+                  <span>Select an instrument to see the fee.</span>
+                </div>
+              )}
             </div>
 
-            {/* Submit Actions */}
+            {preview && preview.rule.requiredDocuments.length > 0 && (
+              <div className={styles.feeCard}>
+                <div className={styles.feeHeader}>
+                  <FileText size={18} />
+                  <span>Documents the officer will ask for</span>
+                </div>
+                {preview.rule.requiredDocuments.map((d) => (
+                  <div key={d} className={styles.feeRow}>
+                    <span>{d}</span>
+                  </div>
+                ))}
+                <div
+                  className={styles.feeRow}
+                  style={{ fontSize: '0.78rem', color: 'var(--text-muted)', marginTop: 8 }}
+                >
+                  <span>
+                    You can upload these from the application page after filing — they are not
+                    needed to submit.
+                  </span>
+                </div>
+              </div>
+            )}
+
             <div className={styles.formActions}>
               <Link href="/dashboard/applications" className="clay-btn clay-btn-ghost">
                 Cancel
@@ -351,7 +594,7 @@ function NewApplicationForm() {
               <button
                 type="submit"
                 className="clay-btn clay-btn-primary clay-btn-lg"
-                disabled={submitting || instruments.length === 0}
+                disabled={submitting || previewing || blocked || instruments.length === 0}
                 style={{ display: 'flex', alignItems: 'center', gap: 8 }}
               >
                 {submitting ? (
@@ -359,7 +602,13 @@ function NewApplicationForm() {
                 ) : (
                   <CreditCard size={18} />
                 )}
-                {submitting ? 'Processing Payment...' : `Pay ₹${calculatedFee} & Submit Application`}
+                {stage === 'filing'
+                  ? 'Filing application…'
+                  : stage === 'paying'
+                    ? 'Waiting for payment…'
+                    : fee === 0
+                      ? 'File application'
+                      : `File and pay ₹${fee ?? '—'}`}
               </button>
             </div>
           </form>
@@ -371,7 +620,13 @@ function NewApplicationForm() {
 
 export default function NewApplicationPageWrapper() {
   return (
-    <Suspense fallback={<div>Loading...</div>}>
+    <Suspense
+      fallback={
+        <div className={styles.loadingWrap}>
+          <Loader2 size={36} className={styles.spin} />
+        </div>
+      }
+    >
       <NewApplicationForm />
     </Suspense>
   );

@@ -1,0 +1,910 @@
+/* ═══════════════════════════════════════════
+   One enforcement case — Claymorphism
+
+   Two columns: the narrative and the console on the left, the facts of the case on
+   the right. The split follows what the officer does rather than how the data is
+   shaped — read the allegation, look at the evidence, act, and check the log; the
+   instrument, the business and the penalty are reference material consulted while
+   doing it.
+
+   The action log is a timeline rather than a table for the same reason the risk
+   queue uses cards: its load-bearing content is the note an officer wrote, which is
+   prose.
+   ═══════════════════════════════════════════ */
+
+.page {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+  animation: global(fadeInUp) 0.4s ease;
+}
+
+.loadingWrap {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 14px;
+  min-height: 420px;
+  color: var(--text-secondary);
+  font-size: 0.9rem;
+}
+
+.spin {
+  animation: global(claySpin) 0.8s linear infinite;
+}
+
+.errorWrap {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  gap: 12px;
+  padding: 60px 32px;
+  background: var(--surface-card);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--clay-shadow-md);
+  color: var(--text-secondary);
+}
+
+.errorWrap svg {
+  color: var(--status-error);
+}
+
+.errorWrap h2 {
+  font-family: var(--font-heading);
+  font-size: 1.3rem;
+  font-weight: 700;
+  color: var(--text-primary);
+}
+
+.errorWrap p {
+  font-size: 0.9rem;
+  line-height: 1.6;
+  max-width: 52ch;
+}
+
+/* ── Header ── */
+.backLink {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 0.82rem;
+  font-weight: 600;
+  color: var(--text-secondary);
+  text-decoration: none;
+  width: fit-content;
+}
+
+.backLink:hover {
+  color: var(--color-primary);
+}
+
+.pageHeader {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 20px;
+  flex-wrap: wrap;
+}
+
+.headMain {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-width: 0;
+}
+
+.headBadges {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.caseNo {
+  font-family: var(--font-heading);
+  font-size: 0.88rem;
+  font-weight: 700;
+  color: var(--color-primary);
+  letter-spacing: 0.2px;
+}
+
+.pageHeader h1 {
+  font-family: var(--font-heading);
+  font-size: 1.55rem;
+  font-weight: 800;
+  color: var(--text-primary);
+  line-height: 1.35;
+  max-width: 68ch;
+}
+
+.headSub {
+  font-size: 0.83rem;
+  color: var(--text-secondary);
+  line-height: 1.6;
+}
+
+.originTag {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 3px 9px;
+  background: var(--surface-warm);
+  border-radius: var(--radius-pill);
+  font-size: 0.7rem;
+  font-weight: 700;
+  color: var(--text-secondary);
+  text-transform: uppercase;
+  letter-spacing: 0.4px;
+}
+
+/* ── Statutory rail ──
+   Where the case sits in the sequence the Act requires. Numbered rather than
+   merely coloured, because the point is the order. */
+.rail {
+  display: flex;
+  align-items: stretch;
+  gap: 4px;
+  padding: 14px 18px;
+  background: var(--surface-card);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--clay-shadow-sm);
+  overflow-x: auto;
+}
+
+.railStep {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 14px 4px 0;
+  flex: 1;
+  min-width: 130px;
+  position: relative;
+}
+
+.railStep:not(:last-child)::after {
+  content: '';
+  position: absolute;
+  right: 4px;
+  top: 50%;
+  width: 6px;
+  height: 6px;
+  border-top: 1.5px solid rgba(61, 64, 91, 0.15);
+  border-right: 1.5px solid rgba(61, 64, 91, 0.15);
+  transform: translateY(-50%) rotate(45deg);
+}
+
+.railDot {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  flex-shrink: 0;
+  border-radius: 50%;
+  background: var(--surface-warm);
+  color: var(--text-muted);
+  font-family: var(--font-heading);
+  font-size: 0.72rem;
+  font-weight: 700;
+}
+
+.railLabel {
+  font-size: 0.78rem;
+  color: var(--text-muted);
+  line-height: 1.35;
+}
+
+.railDone .railDot {
+  background: var(--color-secondary);
+  color: #fff;
+}
+
+.railDone .railLabel {
+  color: var(--text-secondary);
+}
+
+/* The current stage, said twice: weight and colour. */
+.railNow .railDot {
+  background: var(--color-primary);
+  color: #fff;
+  box-shadow: 0 0 0 4px rgba(224, 122, 95, 0.16);
+}
+
+.railNow .railLabel {
+  color: var(--text-primary);
+  font-weight: 700;
+}
+
+/* ── Message boxes ── */
+.errorBox,
+.noticeBox,
+.warnBox {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 13px 16px;
+  border-radius: var(--radius-md);
+  font-size: 0.85rem;
+  line-height: 1.55;
+}
+
+.errorBox {
+  background: var(--status-error-bg);
+  color: #a33c3c;
+}
+
+.noticeBox {
+  background: var(--status-success-bg);
+  color: #3f7d42;
+}
+
+.warnBox {
+  background: var(--status-warning-bg);
+  color: #8a6420;
+  margin-bottom: 4px;
+}
+
+.errorBox svg,
+.noticeBox svg,
+.warnBox svg {
+  flex-shrink: 0;
+  margin-top: 1px;
+}
+
+.boxDismiss {
+  margin-left: auto;
+  border: none;
+  background: none;
+  cursor: pointer;
+  color: inherit;
+  opacity: 0.6;
+  display: flex;
+  padding: 0;
+  flex-shrink: 0;
+}
+
+.boxDismiss:hover {
+  opacity: 1;
+}
+
+/* ── Layout ── */
+.layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1.65fr) minmax(0, 1fr);
+  gap: 18px;
+  align-items: start;
+}
+
+.main,
+.side {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+  min-width: 0;
+}
+
+.card {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 20px 22px;
+  background: var(--surface-card);
+  border: 1px solid rgba(61, 64, 91, 0.06);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--clay-shadow-sm);
+}
+
+.cardTitle {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-family: var(--font-heading);
+  font-size: 0.8rem;
+  font-weight: 700;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.7px;
+  padding-bottom: 10px;
+  border-bottom: 1px solid rgba(61, 64, 91, 0.07);
+}
+
+.cardTitle svg {
+  color: var(--color-primary);
+  flex-shrink: 0;
+}
+
+.countPill {
+  margin-left: auto;
+  padding: 1px 9px;
+  background: var(--surface-warm);
+  border-radius: var(--radius-pill);
+  font-size: 0.72rem;
+  font-weight: 700;
+  color: var(--text-secondary);
+  letter-spacing: 0;
+  font-variant-numeric: tabular-nums;
+}
+
+.empty {
+  font-size: 0.85rem;
+  line-height: 1.65;
+  color: var(--text-secondary);
+}
+
+.hint {
+  font-size: 0.76rem;
+  color: var(--text-muted);
+  line-height: 1.55;
+}
+
+/* Below the required floor, so the officer knows before submitting rather than
+   after a 400. */
+.hintWarn {
+  font-size: 0.76rem;
+  line-height: 1.55;
+  color: #8a6420;
+  font-weight: 600;
+}
+
+.optional {
+  font-weight: 400;
+  color: var(--text-muted);
+  text-transform: none;
+  letter-spacing: 0;
+}
+
+/* ── Allegation ── */
+.description {
+  font-size: 0.9rem;
+  line-height: 1.7;
+  color: var(--text-primary);
+  white-space: pre-wrap;
+}
+
+.complainant {
+  padding: 12px 16px;
+  background: var(--surface-warm);
+  border-radius: var(--radius-md);
+}
+
+.complainant p {
+  font-size: 0.83rem;
+  line-height: 1.65;
+  color: var(--text-secondary);
+}
+
+.complainant strong {
+  color: var(--text-primary);
+}
+
+.outcomeBox {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 14px 16px;
+  background: var(--surface-elevated);
+  border-left: 3px solid var(--color-secondary);
+  border-radius: var(--radius-sm);
+}
+
+.outcomeBox strong {
+  font-family: var(--font-heading);
+  font-size: 0.76rem;
+  font-weight: 700;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.outcomeBox p {
+  font-size: 0.87rem;
+  line-height: 1.65;
+  color: var(--text-primary);
+}
+
+/* ── Evidence ── */
+.evidenceList {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.evidenceRow {
+  display: flex;
+  align-items: flex-start;
+  gap: 11px;
+  padding: 12px 14px;
+  background: var(--surface-warm);
+  border-radius: var(--radius-md);
+}
+
+.evidenceRow > svg {
+  color: var(--color-primary);
+  flex-shrink: 0;
+  margin-top: 2px;
+}
+
+.evidenceMeta {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  min-width: 0;
+}
+
+.evidenceMeta a {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-family: var(--font-heading);
+  font-size: 0.88rem;
+  font-weight: 600;
+  color: var(--text-primary);
+  text-decoration: none;
+  word-break: break-all;
+}
+
+.evidenceMeta a:hover {
+  color: var(--color-primary);
+  text-decoration: underline;
+}
+
+.evidenceMeta span {
+  font-size: 0.76rem;
+  color: var(--text-secondary);
+}
+
+.hash {
+  font-family: ui-monospace, 'SFMono-Regular', Menlo, monospace;
+  font-size: 0.7rem;
+  color: var(--text-muted);
+  word-break: break-all;
+}
+
+.uploadRow {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+  padding-top: 4px;
+}
+
+.uploadBtn {
+  position: relative;
+  overflow: hidden;
+  cursor: pointer;
+}
+
+.uploadBtn input {
+  position: absolute;
+  inset: 0;
+  opacity: 0;
+  cursor: pointer;
+  font-size: 0;
+}
+
+/* ── Console ── */
+.consoleLead {
+  font-size: 0.83rem;
+  line-height: 1.65;
+  color: var(--text-secondary);
+}
+
+/* Each option carries the consequence of pressing it. A dropdown of statuses
+   cannot say "this is sent to the business verbatim". */
+.transitionRow {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(230px, 1fr));
+  gap: 10px;
+}
+
+.transitionBtn {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 13px 15px;
+  text-align: left;
+  background: var(--surface-card);
+  border: 1.5px solid rgba(61, 64, 91, 0.1);
+  border-radius: var(--radius-md);
+  cursor: pointer;
+  transition: border-color 0.2s, background 0.2s;
+}
+
+.transitionBtn:hover {
+  border-color: var(--color-primary);
+}
+
+.transitionBtn strong {
+  font-family: var(--font-heading);
+  font-size: 0.88rem;
+  font-weight: 700;
+  color: var(--text-primary);
+}
+
+.transitionBtn em {
+  font-size: 0.76rem;
+  font-style: normal;
+  line-height: 1.5;
+  color: var(--text-secondary);
+}
+
+.transitionActive {
+  border-color: var(--color-primary);
+  background: rgba(224, 122, 95, 0.05);
+}
+
+/* The two irreversible endings get a warmer edge, so a closure is never one
+   indistinguishable button among five. */
+.transitionFinal {
+  border-color: rgba(229, 115, 115, 0.35);
+}
+
+.transitionFinal:hover {
+  border-color: var(--status-error);
+}
+
+.transitionFinal.transitionActive {
+  border-color: var(--status-error);
+  background: var(--status-error-bg);
+}
+
+.field {
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+}
+
+.field textarea {
+  resize: vertical;
+  min-height: 78px;
+  font-family: var(--font-body);
+}
+
+.consoleActions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.reopenArea {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+/* ── Timeline ── */
+.timeline {
+  display: flex;
+  flex-direction: column;
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.timelineItem {
+  display: flex;
+  gap: 14px;
+  padding-bottom: 18px;
+  position: relative;
+}
+
+/* The connecting line, drawn on every entry but the last. */
+.timelineItem:not(:last-child)::before {
+  content: '';
+  position: absolute;
+  left: 5px;
+  top: 16px;
+  bottom: 0;
+  width: 1.5px;
+  background: rgba(61, 64, 91, 0.1);
+}
+
+.timelineItem:last-child {
+  padding-bottom: 0;
+}
+
+.timelineDot {
+  width: 12px;
+  height: 12px;
+  flex-shrink: 0;
+  margin-top: 4px;
+  border-radius: 50%;
+  background: var(--surface-card);
+  border: 2.5px solid var(--color-secondary);
+  z-index: 1;
+}
+
+.timelineItem:last-child .timelineDot {
+  border-color: var(--color-primary);
+}
+
+.timelineBody {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  min-width: 0;
+  flex: 1;
+}
+
+.timelineHead {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.timelineHead strong {
+  font-family: var(--font-heading);
+  font-size: 0.89rem;
+  font-weight: 700;
+  color: var(--text-primary);
+}
+
+.timelineAt {
+  font-size: 0.74rem;
+  color: var(--text-muted);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.timelineActor {
+  font-size: 0.76rem;
+  color: var(--text-secondary);
+}
+
+.timelineNote {
+  margin-top: 4px;
+  padding: 9px 13px;
+  background: var(--surface-warm);
+  border-radius: var(--radius-sm);
+  font-size: 0.84rem;
+  line-height: 1.65;
+  color: var(--text-primary);
+  white-space: pre-wrap;
+}
+
+/* ── Side: subject ── */
+.subjectCard {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 4px;
+  padding: 13px 15px;
+  background: var(--surface-elevated);
+  border: 1px solid rgba(61, 64, 91, 0.06);
+  border-radius: var(--radius-md);
+  text-decoration: none;
+  min-width: 0;
+  transition: border-color 0.2s, transform 0.2s;
+}
+
+a.subjectCard:hover {
+  border-color: var(--color-primary);
+  transform: translateY(-1px);
+}
+
+.subjectKind {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 0.68rem;
+  font-weight: 700;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.subjectCard strong {
+  font-family: var(--font-heading);
+  font-size: 0.95rem;
+  font-weight: 700;
+  color: var(--text-primary);
+  word-break: break-word;
+}
+
+.subjectSub {
+  font-size: 0.76rem;
+  color: var(--text-secondary);
+  line-height: 1.5;
+}
+
+.subjectWarn {
+  font-size: 0.76rem;
+  font-weight: 700;
+  color: #a33c3c;
+}
+
+.metaLine {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  font-size: 0.78rem;
+  color: var(--text-secondary);
+}
+
+.metaLine svg {
+  color: var(--text-muted);
+  flex-shrink: 0;
+}
+
+/* ── Assignment ── */
+.assigneeLine {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  font-size: 0.86rem;
+  color: var(--text-secondary);
+}
+
+.assigneeLine strong {
+  font-family: var(--font-heading);
+  font-size: 0.95rem;
+  color: var(--text-primary);
+}
+
+.assigneeLine span {
+  font-size: 0.77rem;
+  color: var(--text-muted);
+}
+
+.unassigned {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 11px 14px;
+  background: var(--status-warning-bg);
+  border-radius: var(--radius-sm);
+  font-size: 0.84rem;
+  font-weight: 600;
+  color: #8a6420;
+}
+
+.assignActions {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  align-items: flex-start;
+}
+
+.assignActions > .field {
+  width: 100%;
+}
+
+/* ── Severity ── */
+.severityRow {
+  display: flex;
+  gap: 7px;
+}
+
+.severityBtn {
+  flex: 1;
+  padding: 9px 6px;
+  background: var(--surface-card);
+  border: 1.5px solid rgba(61, 64, 91, 0.1);
+  border-radius: var(--radius-sm);
+  font-family: var(--font-heading);
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: var(--text-secondary);
+  cursor: pointer;
+  transition: border-color 0.2s, color 0.2s, background 0.2s;
+}
+
+.severityBtn:hover {
+  border-color: var(--color-primary);
+}
+
+.severityActive {
+  border-color: var(--color-primary);
+  background: rgba(224, 122, 95, 0.06);
+  color: var(--color-primary);
+}
+
+/* ── Penalty ── */
+.penaltyAmount {
+  font-family: var(--font-heading);
+  font-size: 1.6rem;
+  font-weight: 800;
+  color: var(--text-primary);
+  font-variant-numeric: tabular-nums;
+  line-height: 1.1;
+}
+
+.paidLine,
+.unpaidLine {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  padding: 9px 13px;
+  border-radius: var(--radius-sm);
+  font-size: 0.82rem;
+  font-weight: 700;
+}
+
+.paidLine {
+  background: var(--status-success-bg);
+  color: #3f7d42;
+}
+
+.unpaidLine {
+  background: var(--status-error-bg);
+  color: #a33c3c;
+}
+
+/* ── Prior cases ── */
+.priorList {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.priorList li {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.priorList a {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  text-decoration: none;
+}
+
+.priorNo {
+  font-family: var(--font-heading);
+  font-size: 0.83rem;
+  font-weight: 700;
+  color: var(--color-primary);
+}
+
+.priorList a:hover .priorNo {
+  text-decoration: underline;
+}
+
+.priorMeta {
+  font-size: 0.75rem;
+  color: var(--text-muted);
+  line-height: 1.5;
+}
+
+/* ── Responsive ── */
+@media (max-width: 1080px) {
+  .layout {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 768px) {
+  .pageHeader h1 {
+    font-size: 1.3rem;
+  }
+
+  .rail {
+    padding: 12px 14px;
+  }
+
+  .railStep {
+    min-width: 118px;
+  }
+
+  .consoleActions {
+    flex-direction: column-reverse;
+    align-items: stretch;
+  }
+
+  .severityRow {
+    flex-wrap: wrap;
+  }
+}

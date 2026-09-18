@@ -123,6 +123,26 @@
     inset 0 2px 4px rgba(255, 255, 255, 0.5);
 }
 
+/*
+ * Unread count on the Notifications row. `margin-left: auto` pushes it to the far
+ * edge rather than sitting in the 12px icon/label gap, and it is only rendered when
+ * the count is above zero — so the row has no reserved empty space when the inbox
+ * is clear.
+ */
+.navCount {
+  margin-left: auto;
+  min-width: 22px;
+  padding: 2px 7px;
+  border-radius: var(--radius-pill);
+  background: var(--color-primary);
+  color: #fff;
+  font-size: 0.7rem;
+  font-weight: 700;
+  line-height: 1.5;
+  text-align: center;
+  font-variant-numeric: tabular-nums;
+}
+
 /* Sidebar Footer */
 .sidebarFooter {
   padding: 16px 12px;
@@ -206,6 +226,16 @@
   background: var(--surface-warm);
 }
 
+/*
+ * The search box is inside a form now, so it needs a positioned wrapper to hang the
+ * "no register for this yet" note under without it pushing the topbar taller.
+ */
+.searchWrap {
+  position: relative;
+  flex: 1;
+  max-width: 480px;
+}
+
 .searchBar {
   display: flex;
   align-items: center;
@@ -217,6 +247,12 @@
   max-width: 480px;
   width: 100%;
   color: var(--text-muted);
+  transition: border-color 0.2s, box-shadow 0.2s;
+}
+
+.searchBar:focus-within {
+  border-color: rgba(224, 122, 95, 0.35);
+  box-shadow: 0 0 0 3px rgba(224, 122, 95, 0.08);
 }
 
 .searchBar input {
@@ -229,8 +265,47 @@
   width: 100%;
 }
 
+/* Safari draws its own clear affordance on type="search"; this one is ours. */
+.searchBar input::-webkit-search-cancel-button {
+  appearance: none;
+}
+
 .searchBar input::placeholder {
   color: var(--text-muted);
+}
+
+.clearSearch {
+  border: none;
+  background: none;
+  cursor: pointer;
+  color: var(--text-muted);
+  display: flex;
+  padding: 2px;
+  flex-shrink: 0;
+}
+
+.clearSearch:hover {
+  color: var(--text-primary);
+}
+
+/*
+ * Shown when a pasted identifier belongs to a record type that has no register page
+ * yet — an inspection or enforcement number. Saying so is better than routing to a
+ * list that will match nothing and read as an empty database.
+ */
+.searchNote {
+  position: absolute;
+  top: calc(100% + 6px);
+  left: 0;
+  right: 0;
+  z-index: 20;
+  background: var(--status-info-bg);
+  color: #2b5d7d;
+  font-size: 0.78rem;
+  line-height: 1.5;
+  padding: 9px 14px;
+  border-radius: var(--radius-sm);
+  box-shadow: var(--clay-shadow-sm);
 }
 
 .topbarRight {
@@ -252,15 +327,29 @@
   color: var(--text-primary);
 }
 
-.notifDot {
+/*
+ * Was `.notifDot` — a fixed 8px circle rendered unconditionally, so it was on when
+ * the inbox was empty and stayed on after everything had been read. A count is only
+ * drawn when there is something to count, which means its presence is information.
+ */
+.notifCount {
   position: absolute;
-  top: 8px;
-  right: 8px;
-  width: 8px;
-  height: 8px;
-  border-radius: 50%;
+  top: 4px;
+  right: 3px;
+  min-width: 17px;
+  height: 17px;
+  padding: 0 4px;
+  border-radius: var(--radius-pill);
   background: var(--color-primary);
+  color: #fff;
+  font-family: var(--font-heading);
+  font-size: 0.65rem;
+  font-weight: 700;
+  line-height: 17px;
+  text-align: center;
   border: 2px solid var(--surface-card);
+  box-sizing: content-box;
+  font-variant-numeric: tabular-nums;
 }
 
 .profileWrap {
@@ -327,7 +416,7 @@
   box-shadow: var(--clay-shadow-lg);
   padding: 6px;
   min-width: 200px;
-  animation: fadeInUp 0.2s ease;
+  animation: global(fadeInUp) 0.2s ease;
   border: 1px solid rgba(61, 64, 91, 0.06);
 }
 

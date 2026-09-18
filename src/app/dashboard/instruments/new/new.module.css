@@ -1,5 +1,5 @@
 .page {
-  animation: fadeInUp 0.4s ease;
+  animation: global(fadeInUp) 0.4s ease;
 }
 
 .backLink {
@@ -149,7 +149,7 @@
 }
 
 .spin {
-  animation: claySpin 0.8s linear infinite;
+  animation: global(claySpin) 0.8s linear infinite;
 }
 
 @media (max-width: 640px) {
